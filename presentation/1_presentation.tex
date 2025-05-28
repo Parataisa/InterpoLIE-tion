@@ -17,7 +17,6 @@
 %% this sets the first PDF bookmark and triggers generation of the title page
 \section{Introduction}
 
-%% Custom overview slide since TOC doesn't show subsections
 \begin{frame}
 	\frametitle{Übersicht}
 	\begin{enumerate}
@@ -27,7 +26,7 @@
 		\end{itemize}
 		\item \textbf{Problemstellung}
 		\begin{itemize}
-			\item Resampling Detection
+			\item Kartoffel-Contest Szenario
 		\end{itemize}
 		\item \textbf{Lösungsansätze}
 		\begin{itemize}
@@ -56,16 +55,28 @@
 	\end{itemize}
 \end{frame}
 
-\subsection{Problemstellung}
+\subsection{Kartoffel-Contest Szenario}
 
 \begin{frame}
-	\frametitle{Problemstellung}
+	\frametitle{Kartoffel-Contest Szenario}
 	\begin{itemize}
-		\item \textbf{Resampling Detection:} 
+		\item \textbf{Online-Größenwettbewerb für Hobbygärtner:} 
 		\begin{itemize}
-			\item Resampling als häufige Manipulationstechnik
-			\item Herausforderungen bei der Erkennung
-			\item Notwendigkeit robuster und effizienter Methoden
+			\item Teilnehmer fotografieren größte Kartoffeln
+			\item Maßband/Lineal als Größenreferenz
+			\item Upload auf Contest-Plattform
+		\end{itemize}
+		\item \textbf{Das Problem:} 
+		\begin{itemize}
+			\item Skalierung der Kartoffel (größer erscheinen)
+			\item Verkleinerung des Maßbands (Proportionen manipulieren)
+			\item 200g-Kartoffel wird zu "500g-Riese"
+		\end{itemize}
+		\item \textbf{Die Herausforderung:} 
+		\begin{itemize}
+			\item Manipulation visuell nicht erkennbar
+			\item Alle Proportionen im Bild stimmen
+			\item Ohne Detektion: Betrugsplattform statt Wettbewerb
 		\end{itemize}
 	\end{itemize}
 \end{frame}
