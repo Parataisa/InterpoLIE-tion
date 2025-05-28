@@ -17,133 +17,11 @@ from functools import partial
 # Exposing Digital Forgeries by Detecting Traces of Resampling
 # by Alin C. Popescu and Hany Farid
 
-IMAGE_NAME = 'image_4'  
+IMAGE_NAME = 'image_2'  
 
-def process_chunk_worker(args):
-    padded_img_chunk, start_row, start_col, end_row, end_col, alpha, sigma, K, num_weights = args
-    
-    chunk_rows = end_row - start_row
-    chunk_cols = end_col - start_col
-    n_pixels = chunk_rows * chunk_cols
-    
-    neighborhoods = np.zeros((n_pixels, num_weights))
-    center_values = np.zeros(n_pixels)
-    
-    idx = 0
-    for i in range(start_row, end_row):
-        for j in range(start_col, end_col):
-            if (i+2*K+1 <= padded_img_chunk.shape[0] and j+2*K+1 <= padded_img_chunk.shape[1]):
-                neighborhood = padded_img_chunk[i:i + 2*K + 1, j:j + 2*K + 1]
-                
-                if neighborhood.size == (2*K+1)**2:
-                    neighborhood_flat = neighborhood.flatten()
-                    center_idx = len(neighborhood_flat) // 2
-                    
-                    center_values[idx] = neighborhood_flat[center_idx]
-                    neighbors = np.concatenate([
-                        neighborhood_flat[:center_idx],
-                        neighborhood_flat[center_idx + 1:]
-                    ])
-                    
-                    if len(neighbors) == num_weights:
-                        neighborhoods[idx] = neighbors
-                        idx += 1
-    
-    if idx < n_pixels:
-        neighborhoods = neighborhoods[:idx]
-        center_values = center_values[:idx]
-        n_pixels = idx
-    
-    if n_pixels == 0:
-        return {
-            'alpha_numerator': np.zeros_like(alpha),
-            'alpha_denominator': np.zeros((num_weights, num_weights)),
-            'sigma_numerator': 0.0,
-            'sigma_denominator': 0.0,
-            'total_weight': 0.0,
-            'n_pixels': 0
-        }
-    
-    residuals = center_values - np.dot(neighborhoods, alpha)
-    
-    likelihood_M1 = (1.0 / (np.sqrt(2 * np.pi) * sigma)) * \
-                    np.exp(-0.5 * (residuals / sigma) ** 2)
-    
-    residual_range = np.max(residuals) - np.min(residuals) + 1e-8
-    likelihood_M2 = np.ones_like(residuals) / residual_range
-    
-    prior_M1 = prior_M2 = 0.5
-    
-    numerator = likelihood_M1 * prior_M1
-    denominator = likelihood_M1 * prior_M1 + likelihood_M2 * prior_M2
-    
-    posterior_M1 = numerator / (denominator + 1e-8)
-    
-    W = np.diag(posterior_M1)
-    XTW = neighborhoods.T @ W
-    alpha_denominator = XTW @ neighborhoods
-    alpha_numerator = XTW @ center_values
-    
-    weighted_residuals_sq = posterior_M1 * (residuals ** 2)
-    sigma_numerator = np.sum(weighted_residuals_sq)
-    sigma_denominator = np.sum(posterior_M1)
-    total_weight = np.sum(posterior_M1)
-    
-    return {
-        'alpha_numerator': alpha_numerator,
-        'alpha_denominator': alpha_denominator,
-        'sigma_numerator': sigma_numerator,
-        'sigma_denominator': sigma_denominator,
-        'total_weight': total_weight,
-        'n_pixels': n_pixels
-    }
-
-def process_pmap_row_worker(args):
-    padded_img_row, row_idx, K, alpha, sigma, cols = args
-    
-    row_neighborhoods = []
-    row_centers = []
-    
-    for j in range(K, cols - K):
-        neighborhood = padded_img_row[:, j-K:j+K+1]
-        neighborhood_flat = neighborhood.flatten()
-        center_idx = len(neighborhood_flat) // 2
-        
-        center_val = neighborhood_flat[center_idx]
-        neighbors = np.concatenate([
-            neighborhood_flat[:center_idx],
-            neighborhood_flat[center_idx + 1:]
-        ])
-        
-        row_neighborhoods.append(neighbors)
-        row_centers.append(center_val)
-    
-    if row_neighborhoods:
-        row_neighborhoods = np.array(row_neighborhoods)
-        row_centers = np.array(row_centers)
-        
-        residuals = row_centers - np.dot(row_neighborhoods, alpha)
-        
-        likelihood_M1 = (1.0 / (np.sqrt(2 * np.pi) * sigma)) * \
-                        np.exp(-0.5 * (residuals / sigma) ** 2)
-        
-        residual_range = np.max(residuals) - np.min(residuals) + 1e-8
-        likelihood_M2 = np.ones_like(residuals) / residual_range
-        
-        prior_M1 = prior_M2 = 0.5
-        
-        numerator = likelihood_M1 * prior_M1
-        denominator = likelihood_M1 * prior_M1 + likelihood_M2 * prior_M2
-        
-        posterior_M1 = numerator / (denominator + 1e-8)
-        
-        return row_idx, posterior_M1
-    
-    return row_idx, None
-
-class ParallelMemoryEfficientEMDetector:
+class MemoryEfficientEMDetector:
     def __init__(self, neighborhood_size=5, max_iterations=20, tolerance=1e-4, 
-                 chunk_size=64, max_memory_mb=1000, n_workers=12):
+                 chunk_size=64, max_memory_mb=1000):
         
         self.K = neighborhood_size // 2 
         self.neighborhood_size = neighborhood_size
@@ -151,8 +29,7 @@ class ParallelMemoryEfficientEMDetector:
         self.tolerance = tolerance
         self.chunk_size = chunk_size
         self.max_memory_mb = max_memory_mb
-        self.n_workers = n_workers
-        print(f"🚀 Using {self.n_workers} parallel workers")
+
         
         self.alpha = None
         self.sigma = None
@@ -161,6 +38,212 @@ class ParallelMemoryEfficientEMDetector:
         self.total_pixels_processed = 0
         self.memory_usage_mb = 0
     
+    def _initialize_parameters(self):
+        self.alpha = np.random.normal(0, 0.01, self.num_weights)
+        self.sigma = 0.1
+        self.total_pixels_processed = 0
+
+    def memory_efficient_em_algorithm(self, img):
+        rows, cols = img.shape
+        
+        if self.alpha is None or self.sigma is None:
+            self._initialize_parameters_balanced()  
+        
+        print(f"🚀 Starting memory-efficient EM with {self.num_weights} predictor weights")
+        print(f"   Image size: {rows}×{cols}")
+        print(f"   Using existing parameters: α_range=[{np.min(self.alpha):.4f}, {np.max(self.alpha):.4f}], σ={self.sigma:.4f}")
+        
+        padded_img = np.pad(img, self.K, mode='reflect')
+        
+        max_pixels_per_batch = self.chunk_size
+        total_pixels = (rows - 2*self.K) * (cols - 2*self.K)
+        print(f"   Total pixels: {total_pixels:,}, batch size: {max_pixels_per_batch:,}")
+        
+        for iteration in range(self.max_iter):
+            alpha_old = self.alpha.copy()
+            iter_start_time = time.time()
+            
+            total_alpha_numerator = np.zeros(self.num_weights)
+            total_alpha_denominator = np.zeros((self.num_weights, self.num_weights))
+            total_sigma_numerator = 0.0
+            total_sigma_denominator = 0.0
+            total_pixels_processed = 0
+            
+            batch_count = 0
+            current_batch_neighborhoods = []
+            current_batch_centers = []
+            
+            for i in range(self.K, rows - self.K):
+                for j in range(self.K, cols - self.K):
+                    neighborhood = padded_img[i:i + 2*self.K + 1, j:j + 2*self.K + 1]
+                    
+                    if neighborhood.size == (2*self.K + 1)**2:
+                        neighborhood_flat = neighborhood.flatten()
+                        center_idx = len(neighborhood_flat) // 2
+                        
+                        center_val = neighborhood_flat[center_idx]
+                        neighbors = np.concatenate([
+                            neighborhood_flat[:center_idx],
+                            neighborhood_flat[center_idx + 1:]
+                        ])
+                        
+                        if len(neighbors) == self.num_weights:
+                            current_batch_neighborhoods.append(neighbors)
+                            current_batch_centers.append(center_val)
+                            
+                            if len(current_batch_neighborhoods) >= max_pixels_per_batch:
+                                self._process_em_batch(
+                                    current_batch_neighborhoods,
+                                    current_batch_centers,
+                                    total_alpha_numerator,
+                                    total_alpha_denominator,
+                                    total_sigma_numerator,
+                                    total_sigma_denominator,
+                                    iteration
+                                )
+                                
+                                total_pixels_processed += len(current_batch_neighborhoods)
+                                batch_count += 1
+                                
+                                current_batch_neighborhoods = []
+                                current_batch_centers = []
+                                
+                                if batch_count % 3 == 0:
+                                    gc.collect()
+            
+                total_pixels_processed += len(current_batch_neighborhoods)
+                batch_count += 1
+            
+            print(f"      Processed {batch_count} batches, {total_pixels_processed:,} pixels")
+            
+            self._update_parameters_safely(total_alpha_numerator, total_alpha_denominator,
+                                        total_sigma_numerator, total_sigma_denominator)
+            
+            alpha_change = np.linalg.norm(self.alpha - alpha_old)
+            iter_time = time.time() - iter_start_time
+            
+            print(f"   Iteration {iteration + 1:2d}: α change = {alpha_change:.6f}, "
+                f"σ = {self.sigma:.6f}, time = {iter_time:.2f}s")
+            
+            if alpha_change < self.tolerance:
+                print(f"✅ Converged after {iteration + 1} iterations")
+                break
+        
+        p_map = self._generate_final_p_map(img)
+        
+        return p_map
+
+    def _initialize_parameters_balanced(self):
+        self.alpha = np.random.normal(0, 0.001, self.num_weights)
+        self.sigma = 0.05
+        self.total_pixels_processed = 0
+        
+        print(f"   Initialized: α_std = 0.001, σ = {self.sigma}")
+
+    def _process_em_batch(self, neighborhoods_list, centers_list,
+                            total_alpha_numerator, total_alpha_denominator,
+                            total_sigma_numerator, total_sigma_denominator,
+                            iteration):
+        
+        neighborhoods = np.array(neighborhoods_list)
+        center_values = np.array(centers_list)
+        
+        residuals = center_values - np.dot(neighborhoods, self.alpha)
+        
+        likelihood_M1 = (1.0 / (np.sqrt(2 * np.pi) * self.sigma)) * \
+                        np.exp(-0.5 * (residuals / self.sigma) ** 2)
+        
+        peak_M1 = 1.0 / (np.sqrt(2 * np.pi) * self.sigma) 
+        likelihood_M2_value = peak_M1 * 0.3  
+        likelihood_M2 = np.ones_like(residuals) * likelihood_M2_value
+        
+        prior_M1 = prior_M2 = 0.5
+        numerator = likelihood_M1 * prior_M1
+        denominator = likelihood_M1 * prior_M1 + likelihood_M2 * prior_M2
+        posterior_M1 = numerator / (denominator + 1e-8)
+        
+        for i in range(len(neighborhoods)):
+            weight = posterior_M1[i]
+            x = neighborhoods[i]
+            y = center_values[i]
+            
+            total_alpha_denominator += weight * np.outer(x, x)
+            total_alpha_numerator += weight * x * y
+        
+        weighted_residuals_sq = posterior_M1 * (residuals ** 2)
+        total_sigma_numerator += np.sum(weighted_residuals_sq)
+        total_sigma_denominator += np.sum(posterior_M1)
+        
+        return len(neighborhoods)
+
+    def _update_parameters_safely(self, alpha_num, alpha_denom, sigma_num, sigma_denom):
+        try:
+            reg_term = 1e-5 * np.eye(alpha_denom.shape[0])  
+            regularized_denom = alpha_denom + reg_term
+            new_alpha = np.linalg.solve(regularized_denom, alpha_num)
+
+            alpha_norm = np.linalg.norm(new_alpha)
+            if alpha_norm > 2.0:
+                new_alpha = new_alpha * (2.0 / alpha_norm)
+                print(f"      ⚠️ Alpha norm clipped: {alpha_norm:.3f} → 2.0")
+            
+            self.alpha = new_alpha
+            
+        except np.linalg.LinAlgError:
+            print("      ⚠️ Numerical instability, using gradient step")
+            if sigma_denom > 0:
+                gradient = alpha_num / (sigma_denom + 1e-8)
+                self.alpha = 0.95 * self.alpha + 0.05 * gradient
+        
+        if sigma_denom > 0:
+            new_sigma = np.sqrt(sigma_num / sigma_denom)
+            new_sigma = np.clip(new_sigma, 0.02, 0.3) 
+            
+            momentum = 0.7
+            self.sigma = momentum * self.sigma + (1 - momentum) * new_sigma
+
+    def _generate_final_p_map(self, img):
+        rows, cols = img.shape
+        p_map = np.zeros((rows, cols))
+        
+        padded_img = np.pad(img, self.K, mode='reflect')
+        
+        print("🎨 Generating final probability map...")
+        print(f"   Using σ = {self.sigma:.6f}")
+        
+        peak_M1 = 1.0 / (np.sqrt(2 * np.pi) * self.sigma)
+        likelihood_M2_value = peak_M1 * 0.3
+        
+        print(f"   Likelihood M2 value: {likelihood_M2_value:.6f}")
+        
+        for i in range(self.K, rows - self.K):
+            for j in range(self.K, cols - self.K):
+                neighborhood = padded_img[i-self.K:i+self.K+1, j-self.K:j+self.K+1]
+                neighborhood_flat = neighborhood.flatten()
+                center_idx = len(neighborhood_flat) // 2
+                
+                center_val = neighborhood_flat[center_idx]
+                neighbors = np.concatenate([
+                    neighborhood_flat[:center_idx],
+                    neighborhood_flat[center_idx + 1:]
+                ])
+                
+                residual = center_val - np.dot(neighbors, self.alpha)
+                likelihood_M1 = (1.0 / (np.sqrt(2 * np.pi) * self.sigma)) * \
+                            np.exp(-0.5 * (residual / self.sigma) ** 2)
+                
+                likelihood_M2 = likelihood_M2_value  
+                
+                posterior_M1 = likelihood_M1 / (likelihood_M1 + likelihood_M2)
+                p_map[i, j] = posterior_M1
+        
+        p_map = gaussian_filter(p_map, sigma=0.1)
+        
+        print(f"⚡ Consistent p-map completed")
+        print(f"   Statistics: mean={np.mean(p_map):.4f}, std={np.std(p_map):.4f}")
+        
+        return p_map
+
     def detect_resampling(self, img):
         if isinstance(img, str):
             img = self._load_image(img)
@@ -170,13 +253,14 @@ class ParallelMemoryEfficientEMDetector:
         
         img = (img - img.min()) / (img.max() - img.min() + 1e-8)
         
-        print(f"🧠 Processing {img.shape} image with parallel EM algorithm")
-        print(f"📦 Chunk size: {self.chunk_size}×{self.chunk_size}")
-        print(f"💾 Memory limit: {self.max_memory_mb} MB")
-        print(f"⚡ Workers: {self.n_workers}")
+        self._initialize_parameters_balanced()
+        
+        print(f"\n🧠 Processing {img.shape} image with EM algorithm")
+        print(f"🎯 Neighborhood: {self.neighborhood_size}×{self.neighborhood_size}")
+        print(f"⚖️ Using consistent and balanced likelihood models")
         
         start_time = time.time()
-        p_map = self._parallel_em_algorithm(img)
+        p_map = self.memory_efficient_em_algorithm(img)
         total_time = time.time() - start_time
         
         print(f"⏱️ Total processing time: {total_time:.2f} seconds")
@@ -185,188 +269,7 @@ class ParallelMemoryEfficientEMDetector:
         is_resampled = self._detect_peaks(spectrum)
         
         return p_map, spectrum, is_resampled
-    
-    def _parallel_em_algorithm(self, img):
-        rows, cols = img.shape
-        
-        self._initialize_parameters()
-        
-        print(f"🚀 Starting parallel EM with {self.num_weights} predictor weights")
-        
-        padded_img = np.pad(img, self.K, mode='reflect')
-        
-        for iteration in range(self.max_iter):
-            alpha_old = self.alpha.copy()
-            
-            iter_start_time = time.time()
-            chunk_stats = self._parallel_process_image_chunks(padded_img, iteration)
-            iter_time = time.time() - iter_start_time
-            
-            self._update_global_parameters(chunk_stats)
-            
-            alpha_change = np.linalg.norm(self.alpha - alpha_old)
-            
-            if iteration % 5 == 0:
-                gc.collect()
-            
-            print(f"Iteration {iteration + 1:2d}: α change = {alpha_change:.6f}, "
-                  f"σ = {self.sigma:.6f}, time = {iter_time:.2f}s, "
-                  f"Memory = {self._get_memory_usage():.1f} MB")
-            
-            if alpha_change < self.tolerance:
-                print(f"✅ Converged after {iteration + 1} iterations")
-                break
-        
-        p_map = self._parallel_generate_final_p_map(img)
-        
-        print(f"📊 Processed {self.total_pixels_processed:,} pixels total")
-        
-        return p_map
-    
-    def _initialize_parameters(self):
-        self.alpha = np.random.normal(0, 0.01, self.num_weights)
-        self.sigma = 0.1
-        self.total_pixels_processed = 0
-    
-    def _parallel_process_image_chunks(self, padded_img, iteration):
-        rows, cols = padded_img.shape
-        
-        chunks = []
-        step_size = max(1, self.chunk_size // 2)
-        
-        for start_row in range(self.K, rows - self.K, step_size):
-            for start_col in range(self.K, cols - self.K, step_size):
-                end_row = min(start_row + self.chunk_size, rows - self.K)
-                end_col = min(start_col + self.chunk_size, cols - self.K)
-                
-                chunk_rows = end_row - start_row
-                chunk_cols = end_col - start_col
-                
-                if chunk_rows < 5 or chunk_cols < 5:
-                    continue
-                
-                extract_start_row = max(0, start_row - self.K)
-                extract_end_row = min(rows, end_row + self.K)
-                extract_start_col = max(0, start_col - self.K)
-                extract_end_col = min(cols, end_col + self.K)
-                
-                padded_img_chunk = padded_img[extract_start_row:extract_end_row, 
-                                             extract_start_col:extract_end_col]
-                
-                rel_start_row = start_row - extract_start_row
-                rel_start_col = start_col - extract_start_col
-                rel_end_row = rel_start_row + chunk_rows
-                rel_end_col = rel_start_col + chunk_cols
-                
-                chunks.append((padded_img_chunk, rel_start_row, rel_start_col, 
-                              rel_end_row, rel_end_col, self.alpha.copy(), 
-                              self.sigma, self.K, self.num_weights))
-        
-        print(f"🔄 Processing {len(chunks)} chunks in parallel...")
-        
-        start_time = time.time()
-        
-        chunk_results = []
-        with ProcessPoolExecutor(max_workers=self.n_workers) as executor:
-            future_to_chunk = {executor.submit(process_chunk_worker, chunk): i 
-                              for i, chunk in enumerate(chunks)}
-            
-            for future in as_completed(future_to_chunk):
-                try:
-                    result = future.result()
-                    chunk_results.append(result)
-                except Exception as e:
-                    print(f"⚠️ Chunk processing failed: {e}")
-        
-        parallel_time = time.time() - start_time
-        
-        return self._aggregate_chunk_results(chunk_results, parallel_time, len(chunks))
-    
-    def _aggregate_chunk_results(self, chunk_results, parallel_time, num_chunks):
-        alpha_numerator = np.zeros(self.num_weights)
-        alpha_denominator = np.zeros((self.num_weights, self.num_weights))
-        sigma_numerator = 0.0
-        sigma_denominator = 0.0
-        total_weight = 0.0
-        total_pixels = 0
-        
-        for result in chunk_results:
-            alpha_numerator += result['alpha_numerator']
-            alpha_denominator += result['alpha_denominator']
-            sigma_numerator += result['sigma_numerator']
-            sigma_denominator += result['sigma_denominator']
-            total_weight += result['total_weight']
-            total_pixels += result['n_pixels']
-        
-        self.total_pixels_processed += total_pixels
-        
-        print(f"⚡ Parallel processing: {num_chunks} chunks in {parallel_time:.2f}s")
-        
-        return {
-            'alpha_numerator': alpha_numerator,
-            'alpha_denominator': alpha_denominator,
-            'sigma_numerator': sigma_numerator,
-            'sigma_denominator': sigma_denominator,
-            'total_weight': total_weight,
-            'chunk_count': len(chunk_results)
-        }
-    
-    def _update_global_parameters(self, chunk_stats):
-        try:
-            reg_term = 1e-6 * np.eye(chunk_stats['alpha_denominator'].shape[0])
-            regularized_denominator = chunk_stats['alpha_denominator'] + reg_term
-            
-            self.alpha = np.linalg.solve(regularized_denominator, chunk_stats['alpha_numerator'])
-            
-        except np.linalg.LinAlgError:
-            print("⚠️  Numerical instability in α update, using smaller step")
-            if chunk_stats['total_weight'] > 0:
-                gradient = chunk_stats['alpha_numerator'] / (chunk_stats['total_weight'] + 1e-8)
-                self.alpha = 0.9 * self.alpha + 0.1 * gradient
-        
-        if chunk_stats['sigma_denominator'] > 0:
-            new_sigma = np.sqrt(chunk_stats['sigma_numerator'] / chunk_stats['sigma_denominator'])
-            self.sigma = np.clip(new_sigma, 0.01, 1.0)
-    
-    def _parallel_generate_final_p_map(self, img):
-        """Generate final probability map using parallel row processing"""
-        rows, cols = img.shape
-        p_map = np.zeros((rows, cols))
-        
-        padded_img = np.pad(img, self.K, mode='reflect')
-        
-        print("🎨 Generating final probability map in parallel...")
-        
-        row_args = []
-        for i in range(self.K, rows - self.K):
-            row_start = i - self.K
-            row_end = i + self.K + 1
-            padded_img_row = padded_img[row_start:row_end, :]
-            
-            row_args.append((padded_img_row, i, self.K, self.alpha.copy(), 
-                           self.sigma, cols))
-        
-        start_time = time.time()
-        
-        with ThreadPoolExecutor(max_workers=self.n_workers) as executor:
-            future_to_row = {executor.submit(process_pmap_row_worker, arg): i 
-                           for i, arg in enumerate(row_args)}
-            
-            for future in as_completed(future_to_row):
-                try:
-                    row_idx, posterior_probs = future.result()
-                    if posterior_probs is not None:
-                        p_map[row_idx, self.K:cols-self.K] = posterior_probs
-                except Exception as e:
-                    print(f"⚠️ Row processing failed: {e}")
-        
-        pmap_time = time.time() - start_time
-        print(f"⚡ P-map generation: {len(row_args)} rows in {pmap_time:.2f}s")
-        
-        p_map = gaussian_filter(p_map, sigma=0.5)
-        
-        return p_map
-    
+
     def _analyze_spectrum(self, p_map):
         p_map_hp = p_map - gaussian_filter(p_map, sigma=3)
         
@@ -387,25 +290,34 @@ class ParallelMemoryEfficientEMDetector:
         rows, cols = spectrum.shape
         center_r, center_c = rows // 2, cols // 2
         
-        exclude_radius = min(rows, cols) // 8
+        exclude_radius = min(rows, cols) // 6 
         mask = np.ones((rows, cols), dtype=bool)
         y, x = np.ogrid[:rows, :cols]
         distance = np.sqrt((x - center_c)**2 + (y - center_r)**2)
         mask[distance < exclude_radius] = False
         
         spectrum_masked = spectrum[mask]
-        mean_val = np.mean(spectrum_masked)
-        std_val = np.std(spectrum_masked)
         
-        threshold = mean_val + 2.5 * std_val
+        sorted_vals = np.sort(spectrum_masked)
+        percentile_99 = sorted_vals[int(0.99 * len(sorted_vals))]
+        threshold = percentile_99 * 0.8 
         
         num_peaks = np.sum(spectrum_masked > threshold)
         peak_ratio = num_peaks / len(spectrum_masked)
         max_peak = np.max(spectrum_masked)
         
-        is_resampled = (num_peaks > 10) and (peak_ratio > 0.001) and (max_peak > 0.1)
+        strong_peaks = np.sum(spectrum_masked > threshold * 1.5)
         
-        print(f"🔍 Peak detection: {num_peaks} peaks, ratio: {peak_ratio:.4f}, max: {max_peak:.4f}")
+        is_resampled = (
+            (num_peaks > 5) and 
+            (peak_ratio > 0.0005) and 
+            (max_peak > 0.05) and
+            (strong_peaks > 2)
+        )
+        
+        print(f"🔍 Peak detection: {num_peaks} peaks, "
+              f"ratio: {peak_ratio:.4f}, max: {max_peak:.4f}, "
+              f"strong peaks: {strong_peaks}")
         
         return is_resampled
     
@@ -420,7 +332,7 @@ class ParallelMemoryEfficientEMDetector:
         return np.array(img) / 255.0
     
     def test_single_image(self, image_path_or_array, max_size):
-        print("🚀 Starting Parallel Memory-Efficient Full EM Resampling Detection...")
+        print("🚀 Starting Memory-Efficient Full EM Resampling Detection...")
         print("="*70)
         
         if isinstance(image_path_or_array, str):
@@ -442,6 +354,7 @@ class ParallelMemoryEfficientEMDetector:
         
         overall_start_time = time.time()
         p_map, spectrum, is_resampled = self.detect_resampling(display_img)
+
         total_processing_time = time.time() - overall_start_time
         
         final_memory = self._get_memory_usage()
@@ -472,8 +385,7 @@ class ParallelMemoryEfficientEMDetector:
                         bbox=dict(boxstyle="round,pad=0.3", facecolor='white', 
                                  edgecolor=result_color, linewidth=2))
         
-        param_text = f"""Parallel EM Results:
-Workers: {self.n_workers}
+        param_text = f"""EM Results:
 Neighborhood: {self.neighborhood_size}×{self.neighborhood_size}
 Chunk Size: {self.chunk_size}×{self.chunk_size}
 Final σ: {self.sigma:.4f}
@@ -545,7 +457,7 @@ Peak Memory: {final_memory:.1f} MB"""
         plt.show()
         
         print("\n" + "="*70)
-        print("PARALLEL MEMORY-EFFICIENT EM DETECTION RESULTS")
+        print("MEMORY-EFFICIENT EM DETECTION RESULTS")
         print("="*70)
         print(f"Resampling Detected: {is_resampled}")
         print(f"Image Shape: {display_img.shape}")
@@ -559,30 +471,28 @@ Peak Memory: {final_memory:.1f} MB"""
         print(f"Max |α| weight: {np.max(np.abs(self.alpha)):.4f}")
         print(f"α weight range: [{np.min(self.alpha):.4f}, {np.max(self.alpha):.4f}]")
         print("\nParallel Performance:")
-        print(f"Workers Used: {self.n_workers}")
         print(f"Chunk Size: {self.chunk_size}×{self.chunk_size}")
         print(f"Memory Limit: {self.max_memory_mb} MB")
         print(f"Peak Memory Usage: {final_memory:.1f} MB")
         print("="*70)
 
-def run_parallel_em_demo():
-    print("🚀 Parallel Memory-Efficient Full EM Algorithm Demo")
+def run_em_demo():
+    print("🚀 Memory-Efficient Full EM Algorithm Demo")
     print("="*70)
     
-    detector = ParallelMemoryEfficientEMDetector(
-        neighborhood_size=5,     
-        max_iterations=15,       
-        tolerance=1e-4,          
-        chunk_size=32,           
-        max_memory_mb=2048,      
-        n_workers=24           
+    detector = MemoryEfficientEMDetector(
+        neighborhood_size=5,
+        max_iterations=16,
+        tolerance=1e-4,
+        chunk_size=2048,
+        max_memory_mb=2048
     )
     
     try:
-        print("\n📷 Testing parallel processing on external image")
-        detector.test_single_image(f'img/{IMAGE_NAME}.jpg', max_size=512)
+        print("\n📷 Testing processing on external image")
+        detector.test_single_image(f'img/{IMAGE_NAME}.jpg', max_size=100000)
     except Exception as e:
         print(f"External image test failed: {e}")
 
 if __name__ == "__main__":
-    run_parallel_em_demo()
+    run_em_demo()
