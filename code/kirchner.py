@@ -230,7 +230,7 @@ def run_demo():
     
     try:
         print("\n🔍 Testing External Image...")
-        detector.test_single_image('img/image_1.jpg')
+        detector.test_single_image('img/image_2.jpg')
     except Exception as e:
         print(f"External image test failed: {e}")
 

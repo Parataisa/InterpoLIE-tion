@@ -79,37 +79,6 @@ Detection Pipeline:
 
 ## 🎯 **Category II: Derivative-Based Detection Methods**
 
-### 3️⃣ **Mahdian & Saic Radon Transform (2008)** 📐⭐⭐⭐⭐
-**📍 Source:** *IEEE Transactions on Information Forensics and Security* [^3]
-
-#### **🔧 Advanced Implementation:**
-```python
-# Radon Transform Analysis
-1. Derivative Computation:
-   - Horizontal: D_h = [1, -2, 1]
-   - Vertical: D_v = [1; -2; 1]
-   
-2. Radon Transform:
-   - 180 projection angles (0°-179°)
-   - R(ρ,θ) = ∫∫ D²f(x,y)δ(ρ-xcosθ-ysinθ)dxdy
-   
-3. Autocovariance Analysis:
-   - C(τ) = E[R'(ρ)·R'(ρ+τ)]
-   - DFT peak detection threshold: 10×local_average
-```
-
-#### **✅ Strengths:**
-- **Rotation Invariance:** Detects arbitrary rotation angles
-- **Automatic Detection:** No manual threshold tuning
-- **Theoretical Foundation:** Well-established signal processing principles
-
-#### **❌ Limitations:**
-- **Computational Load:** 180 DFT computations required
-- **Memory Requirements:** O(N²) for Radon transform storage
-- **False Positives:** ~5% on textured regions
-
----
-
 ### 4️⃣ **Gallagher JPEG Detection (2005)** 📸⭐⭐⭐
 **📍 Source:** *2nd Canadian Conference on Computer and Robot Vision* [^4]
 
@@ -214,70 +183,6 @@ Detection Pipeline:
 
 ---
 
-## 🎯 **Category V: Copy-Move Detection Algorithms**
-
-### 7️⃣ **Fridrich et al. DCT Block Matching (2003)** 🧩⭐⭐⭐⭐
-**📍 Source:** *Digital Forensic Research Workshop* [^7]
-
-#### **🔧 Robust Implementation:**
-```python
-# Block Matching Algorithm
-1. Block Extraction:
-   - B×B blocks (B=16 typical)
-   - Overlapping with 1-pixel stride
-   
-2. DCT Feature Extraction:
-   - Quantization matrix Q_16 = 2.5×Q_8 (AC)
-   - Q_16[0,0] = 2×Q_8[0,0] (DC)
-   
-3. Lexicographic Sorting:
-   - Complexity: O(MN log(MN))
-   
-4. Shift Vector Analysis:
-   - Threshold T = 150 for 32×32 minimum region
-   - Normalize shift vectors: s₁ ≥ 0
-```
-
-#### **✅ Validated Strengths:**
-- **JPEG Robustness:** Works with Q≥20
-- **Precise Localization:** Pixel-level accuracy
-- **Connected Component Analysis:** Morphological post-processing
-- **Real-world Testing:** Validated on actual forgeries
-
----
-
-### 8️⃣ **Bayram et al. Fourier-Mellin Transform (2009)** 🌀⭐⭐⭐⭐
-**📍 Source:** *IEEE ICASSP* [^8]
-
-#### **🔧 FMT Feature Extraction:**
-```python
-# Rotation-Scale-Translation Invariant Features
-1. Fourier Transform:
-   |I'(fx,fy)| = |σ|⁻²|I(...)| (translation invariant)
-   
-2. Log-Polar Resampling:
-   |I'(ρ,θ)| = |σ|⁻²|I(ρ-logσ, θ-α)|
-   
-3. 1D Projection:
-   g(θ) = Σlog(|I(ρⱼ,θ)|)
-   
-4. Feature Quantization:
-   - 45-dimensional vector
-   - Rotation invariance via g₁(θ') = g(θ') + g(θ'+90°)
-   
-5. Counting Bloom Filters:
-   - Hash-based similarity: O(MN) complexity
-   - Trade-off: Speed vs. robustness
-```
-
-#### **✅ Transformation Robustness:**
-- **Rotation:** Up to 10° detection
-- **Scaling:** Up to 10% detection
-- **JPEG:** Q≥20 successful detection
-- **Speed Improvement:** 12.5× faster with bloom filters
-
----
-
 ## 📈 **Comparative Performance Analysis**
 
 ### **Detection Accuracy Comparison**
@@ -336,16 +241,11 @@ Detection Pipeline:
 
 [^2]: Kirchner, M. (2008). Fast and reliable resampling detection by spectral analysis of fixed linear predictor residue. *ACM Multimedia and Security Workshop*, 11-20.
 
-[^3]: Mahdian, B., & Saic, S. (2008). Blind authentication using periodic properties of interpolation. *IEEE Transactions on Information Forensics and Security*, 3(3), 529-538.
-
 [^4]: Gallagher, A. C. (2005). Detection of linear and cubic interpolation in JPEG compressed images. *2nd Canadian Conference on Computer and Robot Vision*, 65-72.
 
 [^5]: Feng, X., Cox, I. J., & Doërr, G. (2012). Normalized energy density-based forensic detection of resampled images. *IEEE Transactions on Multimedia*, 14(3), 536-545.
 
 [^6]: Vázquez-Padín, D., Comesaña, P., & Pérez-González, F. (2015). An SVD approach to forensic image resampling detection. *23rd European Signal Processing Conference*, 2067-2071.
 
-[^7]: Fridrich, J., Soukal, D., & Lukáš, J. (2003). Detection of copy-move forgery in digital images. *Digital Forensic Research Workshop*.
-
-[^8]: Bayram, S., Sencar, H. T., & Memon, N. (2009). An efficient and robust method for detecting copy-move forgery. *IEEE ICASSP*, 1053-1056.
 
 ---
