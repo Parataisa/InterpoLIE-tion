@@ -79,6 +79,29 @@ Detection Pipeline:
 
 ## 🎯 **Category II: Derivative-Based Detection Methods**
 
+### 3️⃣ **Mahdian & Saic Radon Transform (2008)** 📐⭐⭐⭐⭐
+**📍 Source:** *Blind Authentication Using Periodic Properties of Interpolation* [^3]
+
+#### **🔧 Core Mechanism:**
+```python
+# Derivative-Based Analysis
+1. Second Derivative Computation: D²f(x,y) along horizontal/vertical
+2. Radon Transform Projection: R(ρ,θ) for θ ∈ [0°, 179°]
+3. First Derivative of Projections: R'(ρ,θ)
+4. Autocovariance Analysis: C(τ) = E[R'(ρ)·R'(ρ+τ)]
+5. DFT Peak Detection: Periodic patterns in frequency domain
+```
+
+#### **✅ Strengths:**
+- **Directional Analysis:** 180 projection angles for comprehensive detection
+- **Mathematical Rigor:** Well-founded in signal processing theory
+- **Rotation Handling:** Radon transform naturally handles arbitrary orientations
+
+#### **❌ Limitations:**
+- **Computational Cost:** 180 DFT computations per analysis
+- **Parameter Tuning:** Multiple thresholds require optimization
+
+--- 
 ### 4️⃣ **Gallagher JPEG Detection (2005)** 📸⭐⭐⭐
 **📍 Source:** *2nd Canadian Conference on Computer and Robot Vision* [^4]
 
