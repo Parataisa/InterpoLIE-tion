@@ -17,7 +17,7 @@ from functools import partial
 # Exposing Digital Forgeries by Detecting Traces of Resampling
 # by Alin C. Popescu and Hany Farid
 
-IMAGE_NAME = 'image_2'  
+IMAGE_NAME = 'IMG_1'  
 
 class MemoryEfficientEMDetector:
     def __init__(self, neighborhood_size=5, max_iterations=20, tolerance=1e-4, 
@@ -38,29 +38,23 @@ class MemoryEfficientEMDetector:
         # Statistics
         self.total_pixels_processed = 0
         self.memory_usage_mb = 0
-        self.signal_range = None  # For proper M2 modeling
+        self.signal_range = None  
     
     def _initialize_parameters(self, img):
         """Initialize parameters with better defaults based on image statistics"""
-        # Better alpha initialization - small but not too small
-        self.alpha = np.random.normal(0, 0.01, self.num_weights)
+        self.alpha = np.random.normal(0, 0.005, self.num_weights)  
         
-        # Initialize sigma based on image noise estimate
-        # Use Laplacian of Gaussian to estimate noise
-        img_filtered = gaussian_filter(img, sigma=0.5)
+        img_filtered = gaussian_filter(img, sigma=1.0) 
         noise_estimate = np.std(img - img_filtered)
-        self.sigma = max(0.1, min(0.3, noise_estimate * 2))
-        
-        # Calculate signal range for M2 model
+        self.sigma = max(0.15, min(0.4, noise_estimate * 3)) 
         self.signal_range = img.max() - img.min()
         
-        print(f"   Initialized: α_std = 0.01, σ = {self.sigma:.4f}")
+        print(f"   CONSERVATIVE init: α_std = 0.005, σ = {self.sigma:.4f}")
         print(f"   Signal range: {self.signal_range:.4f}")
 
     def memory_efficient_em_algorithm(self, img):
         rows, cols = img.shape
         
-        # Initialize parameters based on image
         self._initialize_parameters(img)
         
         print(f"🚀 Starting FIXED EM with {self.num_weights} predictor weights")
@@ -126,7 +120,6 @@ class MemoryEfficientEMDetector:
                                 if batch_count % 3 == 0:
                                     gc.collect()
             
-            # Process remaining batch
             if current_batch_neighborhoods:
                 self._process_em_batch_fixed(
                     current_batch_neighborhoods,
@@ -142,11 +135,9 @@ class MemoryEfficientEMDetector:
             
             print(f"      Processed {batch_count} batches, {total_pixels_processed:,} pixels")
             
-            # Update parameters
             self._update_parameters_safely(total_alpha_numerator, total_alpha_denominator,
                                         total_sigma_numerator, total_sigma_denominator)
             
-            # Check convergence
             alpha_change = np.linalg.norm(self.alpha - alpha_old)
             sigma_change = abs(self.sigma - sigma_old)
             iter_time = time.time() - iter_start_time
@@ -166,108 +157,101 @@ class MemoryEfficientEMDetector:
                                total_alpha_numerator, total_alpha_denominator,
                                total_sigma_numerator, total_sigma_denominator,
                                iteration):
-        """FIXED batch processing with proper likelihood models"""
-        
         neighborhoods = np.array(neighborhoods_list)
         center_values = np.array(centers_list)
         
-        # Compute residuals
         residuals = center_values - np.dot(neighborhoods, self.alpha)
         
-        # Model M1: Gaussian likelihood (correlated pixels)
         likelihood_M1 = (1.0 / (np.sqrt(2 * np.pi) * self.sigma)) * \
                         np.exp(-0.5 * (residuals / self.sigma) ** 2)
         
-        # Model M2: UNIFORM likelihood over signal range (uncorrelated pixels)
-        # This is the key fix - M2 should be uniform, not a fraction of M1
         likelihood_M2 = np.ones_like(residuals) / self.signal_range
         
-        # Prior probabilities (can be adjusted)
-        prior_M1 = 0.7  # Assume most pixels are correlated
-        prior_M2 = 0.3  # Some pixels are outliers
+        prior_M1 = 0.4 
+        prior_M2 = 0.6 
         
-        # Posterior probabilities using Bayes rule
         numerator_M1 = likelihood_M1 * prior_M1
         numerator_M2 = likelihood_M2 * prior_M2
-        denominator = numerator_M1 + numerator_M2 + 1e-10  # Avoid division by zero
+        denominator = numerator_M1 + numerator_M2 + 1e-10
         
         posterior_M1 = numerator_M1 / denominator
         posterior_M2 = numerator_M2 / denominator
         
-        # Debug: Print statistics for first few iterations
-        if iteration < 3:
-            print(f"      Batch stats - M1 posterior: mean={np.mean(posterior_M1):.3f}, "
-                  f"std={np.std(posterior_M1):.3f}")
-            print(f"      Residual stats: mean={np.mean(np.abs(residuals)):.4f}, "
-                  f"std={np.std(residuals):.4f}")
+        confidence_threshold = 0.7  
+        confidence_weights = np.where(
+            np.maximum(posterior_M1, posterior_M2) > confidence_threshold,
+            1.0,
+            0.3  
+        )
         
-        # Update alpha (weighted least squares)
+        posterior_M1_weighted = posterior_M1 * confidence_weights
+        
+        if iteration < 3:
+            high_conf_pixels = np.sum(np.maximum(posterior_M1, posterior_M2) > confidence_threshold)
+            print(f"      Conservative batch - M1 posterior: mean={np.mean(posterior_M1):.3f}")
+            print(f"      High confidence pixels: {high_conf_pixels}/{len(posterior_M1)} "
+                f"({100*high_conf_pixels/len(posterior_M1):.1f}%)")
+            print(f"      Residual stats: mean={np.mean(np.abs(residuals)):.4f}")
+        
         for i in range(len(neighborhoods)):
-            weight = posterior_M1[i]
+            weight = posterior_M1_weighted[i]
             x = neighborhoods[i]
             y = center_values[i]
             
             total_alpha_denominator += weight * np.outer(x, x)
             total_alpha_numerator += weight * x * y
         
-        # Update sigma (weighted variance)
-        weighted_residuals_sq = posterior_M1 * (residuals ** 2)
+        weighted_residuals_sq = posterior_M1_weighted * (residuals ** 2)
         total_sigma_numerator += np.sum(weighted_residuals_sq)
-        total_sigma_denominator += np.sum(posterior_M1)
+        total_sigma_denominator += np.sum(posterior_M1_weighted)
         
         return len(neighborhoods)
 
     def _update_parameters_safely(self, alpha_num, alpha_denom, sigma_num, sigma_denom):
         """Update parameters with better numerical stability"""
         
-        # Update alpha with regularization
         try:
-            # Add regularization to prevent singular matrices
-            reg_term = 1e-6 * np.eye(alpha_denom.shape[0])
+            reg_term = 1e-4 * np.eye(alpha_denom.shape[0]) 
             regularized_denom = alpha_denom + reg_term
             new_alpha = np.linalg.solve(regularized_denom, alpha_num)
 
-            # Clip alpha to prevent extreme values
             alpha_norm = np.linalg.norm(new_alpha)
-            if alpha_norm > 1.0:  # More conservative clipping
-                new_alpha = new_alpha * (1.0 / alpha_norm)
-                print(f"      ⚠️ Alpha norm clipped: {alpha_norm:.3f} → 1.0")
+            max_alpha_norm = 0.5
+            if alpha_norm > max_alpha_norm:
+                new_alpha = new_alpha * (max_alpha_norm / alpha_norm)
+                print(f"      ⚠️ Conservative alpha clipping: {alpha_norm:.3f} → {max_alpha_norm}")
             
-            self.alpha = new_alpha
+            momentum = 0.9
+            self.alpha = momentum * self.alpha + (1 - momentum) * new_alpha
             
         except np.linalg.LinAlgError:
-            print("      ⚠️ Numerical instability, using gradient step")
+            print("      ⚠️ Using conservative gradient step")
             if sigma_denom > 0:
                 gradient = alpha_num / (sigma_denom + 1e-8)
-                learning_rate = 0.1  # Conservative learning rate
+                learning_rate = 0.05  
                 self.alpha = (1 - learning_rate) * self.alpha + learning_rate * gradient
         
-        # Update sigma with bounds
         if sigma_denom > 0:
             new_sigma = np.sqrt(sigma_num / sigma_denom)
-            # Keep sigma in reasonable bounds
-            new_sigma = np.clip(new_sigma, 0.05, 0.5)
+            new_sigma = np.clip(new_sigma, 0.1, 0.5)  
             
-            # Use momentum for stability
-            momentum = 0.8
+            momentum = 0.85
             self.sigma = momentum * self.sigma + (1 - momentum) * new_sigma
 
     def _generate_final_p_map_fixed(self, img):
-        """Generate final probability map with fixed likelihood calculation"""
         rows, cols = img.shape
         p_map = np.zeros((rows, cols))
         
         padded_img = np.pad(img, self.K, mode='reflect')
         
-        print("🎨 Generating FIXED probability map...")
+        print("🎨 Generating CONSERVATIVE probability map...")
         print(f"   Using σ = {self.sigma:.6f}, signal_range = {self.signal_range:.4f}")
         
-        # Fixed M2 likelihood - uniform over signal range
         likelihood_M2_value = 1.0 / self.signal_range
-        prior_M1 = 0.7
-        prior_M2 = 0.3
+        prior_M1 = 0.3  # Very conservative - most pixels assumed natural
+        prior_M2 = 0.7  # High prior for natural pixels
         
-        print(f"   M2 likelihood value: {likelihood_M2_value:.6f}")
+        print(f"   Conservative priors: M1={prior_M1}, M2={prior_M2}")
         
         for i in range(self.K, rows - self.K):
             for j in range(self.K, cols - self.K):
@@ -283,25 +267,28 @@ class MemoryEfficientEMDetector:
                 
                 residual = center_val - np.dot(neighbors, self.alpha)
                 
-                # M1: Gaussian likelihood
                 likelihood_M1 = (1.0 / (np.sqrt(2 * np.pi) * self.sigma)) * \
-                              np.exp(-0.5 * (residual / self.sigma) ** 2)
+                            np.exp(-0.5 * (residual / self.sigma) ** 2)
                 
-                # M2: Uniform likelihood
                 likelihood_M2 = likelihood_M2_value
                 
-                # Posterior probability
                 numerator_M1 = likelihood_M1 * prior_M1
                 numerator_M2 = likelihood_M2 * prior_M2
                 denominator = numerator_M1 + numerator_M2 + 1e-10
                 
                 posterior_M1 = numerator_M1 / denominator
+                
+                if posterior_M1 < 0.8:
+                    posterior_M1 = posterior_M1 * 0.5 
+                
                 p_map[i, j] = posterior_M1
         
-        # Light smoothing to reduce noise
-        p_map = gaussian_filter(p_map, sigma=0.5)
+        p_map = gaussian_filter(p_map, sigma=1.0)
         
-        print(f"⚡ FIXED p-map completed")
+        from scipy.ndimage import median_filter
+        p_map = median_filter(p_map, size=3)
+        
+        print(f"⚡ CONSERVATIVE p-map completed")
         print(f"   Statistics: mean={np.mean(p_map):.4f}, std={np.std(p_map):.4f}")
         print(f"   Min/Max: [{np.min(p_map):.4f}, {np.max(p_map):.4f}]")
         
@@ -580,7 +567,7 @@ def run_em_demo():
     
     try:
         print("\n📷 Testing processing on external image")
-        detector.test_single_image(f'img/{IMAGE_NAME}.jpg', max_size=400)
+        detector.test_single_image(f'img/{IMAGE_NAME}.png', max_size=400)
     except Exception as e:
         print(f"External image test failed: {e}")
 
