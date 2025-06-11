@@ -36,9 +36,9 @@ class KirchnerDetector:
         
         # Detection thresholds based on sensitivity level
         thresholds = {
-            'low': {'gradient': 0.001, 'peak_ratio': 0.003, 'max_peak': 0.10},
-            'medium': {'gradient': 0.02, 'peak_ratio': 0.005, 'max_peak': 0.15},
-            'high': {'gradient': 0.04, 'peak_ratio': 0.008, 'max_peak': 0.20}
+            'low':      {'gradient': 0.001, 'peak_ratio': 0.003, 'max_peak': 0.10},
+            'medium':   {'gradient': 0.02,  'peak_ratio': 0.005, 'max_peak': 0.15},
+            'high':     {'gradient': 0.04,  'peak_ratio': 0.008, 'max_peak': 0.20}
         }
         
         t = thresholds.get(sensitivity, thresholds['high'])
@@ -89,7 +89,7 @@ class KirchnerDetector:
     def _generate_kirchner_pmap(self, prediction_error):
         """
         Generate p-map using Kirchner's contrast function:
-        p = λ * exp(-|e|^tau / sigma)
+        p = lambda * exp(- abs(e)^tau / sigma)
         """
         abs_error = np.abs(prediction_error)
         p_map = self.lambda_param * np.exp(-(abs_error ** self.tau) / self.sigma)
@@ -129,9 +129,7 @@ class KirchnerDetector:
         normalized = filtered / (np.max(filtered) + 1e-8)
         gamma_corrected = normalized ** gamma
         
-        enhanced = gamma_corrected * np.max(filtered)
-        
-        return enhanced
+        return gamma_corrected
     
     def _detect_peaks(self, spectrum):
         rows, cols = spectrum.shape
@@ -406,7 +404,6 @@ def test_kirchner_sensitivity(img_path):
         detector = KirchnerDetector(sensitivity=sensitivity)
         
         result = detector.detect(img_path)
-        
         rows, cols = result['spectrum'].shape
         center_r, center_c = rows // 2, cols // 2
         

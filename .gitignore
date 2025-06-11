@@ -3,3 +3,4 @@
 *.bbl
 *.synctex.gz
 results*
+test_results*
