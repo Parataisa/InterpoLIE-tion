@@ -130,12 +130,12 @@ class KirchnerDetector:
         Generate p-map using Kirchner's contrast function.
         
         Mathematical formula (Eq. 21):
-        p = λ * exp(- |error|^τ / σ)
+        p = lambda * exp(- |error|^tau / sigma)
         
         Where:
-        - λ (lambda_param): amplitude scaling factor
-        - τ (tau): error sensitivity parameter (≥ 1)
-        - σ (sigma): variance scaling parameter (> 0)
+        - lambda: amplitude scaling factor
+        - tau: error sensitivity parameter (≥ 1)
+        - sigma: variance scaling parameter (> 0)
         
         Physical interpretation:
         - Large prediction errors → small p-map values (low probability)
@@ -312,7 +312,7 @@ class KirchnerDetector:
         # Fix the custom_vmin issue
         spectrum_min = result['spectrum'][result['spectrum'] > 0].min() if np.any(result['spectrum'] > 0) else 1e-6
         
-        im3 = axes[1, 0].imshow(result['spectrum'], cmap='hot',
+        im3 = axes[1, 0].imshow(result['spectrum'], cmap='inferno',
                                 norm=LogNorm(vmin=spectrum_min, vmax=result['spectrum'].max()),
                                 extent=[freq_x[0], freq_x[-1], freq_y[-1], freq_y[0]],
                                 origin='lower')
@@ -348,15 +348,6 @@ class KirchnerDetector:
 
 
 def save_visualization(filename, p_map, spectrum, prediction_error, detected, output_folder):
-    """
-    Save individual visualization for batch processing.
-    
-    Creates comprehensive 4-panel analysis showing:
-    - P-map with periodic artifacts
-    - Prediction error distribution
-    - Enhanced spectrum in log scale
-    - Statistical error analysis
-    """
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
     fig.suptitle(f'{filename} - {"DETECTED" if detected else "NOT DETECTED"}',
                  fontsize=14, fontweight='bold',
@@ -405,16 +396,6 @@ def save_visualization(filename, p_map, spectrum, prediction_error, detected, ou
 
 
 class BatchProcessor:
-    """
-    Batch processing system for large-scale resampling detection.
-    
-    Features:
-    - Multi-threaded processing for performance
-    - Multi-sensitivity analysis for each image
-    - Comprehensive result logging with threshold comparison
-    - Optional visualization generation
-    - Support for multiple image formats
-    """
     def __init__(self, input_folder, output_folder, sensitivity='medium', max_workers=12, test_all_sensitivities=False):
         self.input_folder = Path(input_folder)
         self.output_folder = Path(output_folder)
@@ -434,21 +415,10 @@ class BatchProcessor:
         return images
 
     def process_single(self, img_path):
-        """
-        Process single image with error handling and optional multi-sensitivity analysis.
-        
-        Returns comprehensive result dictionary with:
-        - Detection status (for all sensitivity levels if enabled)
-        - Processing time
-        - Analysis components (p-map, spectrum, error)
-        - Detailed metrics for threshold comparison
-        - Error information if processing fails
-        """
         try:
             start_time = time.time()
             
             if self.test_all_sensitivities:
-                # Test all sensitivity levels
                 results = {}
                 detailed_metrics = {}
                 
@@ -480,7 +450,6 @@ class BatchProcessor:
                     'detected_high': results['high']['detected']
                 }
             else:
-                # Single sensitivity processing (original behavior)
                 result = self.detector.detect(str(img_path))
                 processing_time = time.time() - start_time
 
@@ -500,14 +469,6 @@ class BatchProcessor:
             }
 
     def _extract_detection_metrics(self, spectrum, detector):
-        """
-        Extract detailed detection metrics for threshold comparison.
-        
-        Returns metrics dictionary with:
-        - Gradient analysis results
-        - Peak detection parameters
-        - Threshold comparisons
-        """
         rows, cols = spectrum.shape
         center_r, center_c = rows // 2, cols // 2
 
@@ -548,15 +509,6 @@ class BatchProcessor:
         }
 
     def process_batch(self, save_visualizations=True):
-        """
-        Process batch of images with parallel processing and optional multi-sensitivity analysis.
-        
-        Returns:
-        - Pandas DataFrame with results
-        - CSV export with timestamp
-        - Optional visualizations for each image
-        - Multi-sensitivity comparison plots if enabled
-        """
         images = self.scan_images()
         print(f"Found {len(images)} images")
         
@@ -577,7 +529,6 @@ class BatchProcessor:
                 results.append(result)
 
                 if self.test_all_sensitivities and 'multi_sensitivity_results' in result:
-                    # Display multi-sensitivity results
                     low_status = 'DETECTED' if result['detected_low'] else 'NOT DETECTED'
                     med_status = 'DETECTED' if result['detected_medium'] else 'NOT DETECTED'
                     high_status = 'DETECTED' if result['detected_high'] else 'NOT DETECTED'
@@ -586,7 +537,6 @@ class BatchProcessor:
                     print(f"{progress:5.1f}% - {result['file_name']}:")
                     print(f"    LOW: {low_status}, MEDIUM: {med_status}, HIGH: {high_status}")
                 else:
-                    # Single sensitivity display
                     status = 'DETECTED' if result.get('detected') else 'NOT DETECTED'
                     if 'error' in result:
                         status = 'ERROR'
@@ -594,13 +544,11 @@ class BatchProcessor:
                     progress = ((i + 1) / len(images)) * 100
                     print(f"{progress:5.1f}% - {result['file_name']}: {status}")
 
-        # Export results to CSV
         df = self._create_results_dataframe(results)
         timestamp = time.strftime('%Y%m%d_%H%M%S')
         csv_path = self.output_folder / f'results_{timestamp}.csv'
         df.to_csv(csv_path, index=False)
 
-        # Generate visualizations if requested
         if save_visualizations:
             vis_folder = self.output_folder / 'visualizations'
             vis_folder.mkdir(exist_ok=True)
@@ -657,7 +605,6 @@ class BatchProcessor:
             return pd.DataFrame()
             
         if self.test_all_sensitivities:
-            # Multi-sensitivity DataFrame
             df_data = []
             for result in results:
                 if 'error' in result:
@@ -677,8 +624,6 @@ class BatchProcessor:
                         'detected_high': result['detected_high'],
                         'processing_time': result['processing_time']
                     }
-                    
-                    # Add detailed metrics if available
                     if 'detailed_metrics' in result:
                         for sensitivity, metrics in result['detailed_metrics'].items():
                             if metrics:
@@ -699,7 +644,6 @@ class BatchProcessor:
             
             return pd.DataFrame(df_data)
         else:
-            # Single sensitivity DataFrame (original behavior)
             return pd.DataFrame(results)
 
     def _create_multi_sensitivity_visualization(self, result, vis_folder):
@@ -715,16 +659,13 @@ class BatchProcessor:
         multi_results = result['multi_sensitivity_results']
         detailed_metrics = result['detailed_metrics']
         
-        # Use results from medium sensitivity for P-map and spectrum (they're identical anyway)
         p_map = multi_results['medium']['p_map']
         spectrum = multi_results['medium']['spectrum']
         prediction_error = multi_results['medium']['prediction_error']
         
-        # Create clean figure layout - just top row and bottom table
         fig = plt.figure(figsize=(12, 8))
         gs = fig.add_gridspec(2, 2, height_ratios=[1, 0.6], hspace=0.4, wspace=0.3)
         
-        # Title with overall detection summary
         detection_summary = []
         for sens in ['low', 'medium', 'high']:
             status = "✓" if multi_results[sens]['detected'] else "✗"
@@ -733,7 +674,6 @@ class BatchProcessor:
         fig.suptitle(f'Multi-Sensitivity Threshold Analysis: {filename}\n{" | ".join(detection_summary)}', 
                      fontsize=14, fontweight='bold')
 
-        # Top row: P-map and Spectrum only
         # P-map
         ax_pmap = fig.add_subplot(gs[0, 0])
         im1 = ax_pmap.imshow(p_map, cmap='gray', vmin=0, vmax=1)
@@ -750,7 +690,7 @@ class BatchProcessor:
         
         spectrum_min = spectrum[spectrum > 0].min() if np.any(spectrum > 0) else 1e-6
         
-        im2 = ax_spectrum.imshow(spectrum, cmap='hot',
+        im2 = ax_spectrum.imshow(spectrum, cmap='inferno',
                       norm=LogNorm(vmin=spectrum_min, vmax=spectrum.max()),
                       extent=[freq_x[0], freq_x[-1], freq_y[-1], freq_y[0]],
                       origin='lower')
@@ -766,7 +706,6 @@ class BatchProcessor:
         ax_table.axis('off')
         
         if all(detailed_metrics[s] is not None for s in ['low', 'medium', 'high']):
-            # Create compact metrics comparison table with shorter headers
             table_data = []
             headers = ['Level', 'Max Grad', 'Grad Thresh', 'Grad', 
                       'Peak Ratio', 'Ratio Thresh', 'Ratio', 
@@ -778,14 +717,14 @@ class BatchProcessor:
                 
                 row = [
                     sensitivity.upper(),
-                    f"{metrics['max_gradient']:.3f}",
-                    f"{metrics['gradient_threshold']:.3f}",
+                    f"{metrics['max_gradient']:.5f}",
+                    f"{metrics['gradient_threshold']:.5f}",
                     "✓" if metrics['gradient_detected'] else "✗",
-                    f"{metrics['peak_ratio']:.3f}",
-                    f"{metrics['peak_ratio_threshold']:.3f}",
+                    f"{metrics['peak_ratio']:.5f}",
+                    f"{metrics['peak_ratio_threshold']:.5f}",
                     "✓" if metrics['peak_ratio_detected'] else "✗",
-                    f"{metrics['max_peak']:.3f}",
-                    f"{metrics['max_peak_threshold']:.3f}",
+                    f"{metrics['max_peak']:.5f}",
+                    f"{metrics['max_peak_threshold']:.5f}",
                     "✓" if metrics['max_peak_detected'] else "✗",
                     "DETECTED" if detected else "NOT DETECTED"
                 ]
@@ -887,12 +826,6 @@ def detect_single_image(image_path, sensitivity='medium', save_plot=False):
 
 
 def test_kirchner_sensitivity(img_path):
-    """
-    Test Kirchner detector with different sensitivity levels.
-    
-    Provides comprehensive analysis across sensitivity settings
-    with detailed metric reporting and visualization.
-    """
     print(f"Testing Kirchner detector on: {img_path}")
     print("=" * 50)
 
@@ -998,7 +931,6 @@ def run_demo():
         print("Running demo...")
         timestamp = time.strftime('%Y%m%d_%H%M%S')
         
-        # Run both single and multi-sensitivity demos
         print("\n=== Single Sensitivity Demo (HIGH) ===")
         output_folder_single = f'results_single_{timestamp}'
         try:
@@ -1045,7 +977,6 @@ if __name__ == "__main__":
                 input_folder = sys.argv[2]
                 output_folder = sys.argv[3] if len(sys.argv) > 3 else None
                 
-                # Check if multi-sensitivity flag is provided
                 test_all = "--all-sensitivities" in sys.argv
                 
                 if test_all:
