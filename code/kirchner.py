@@ -22,10 +22,10 @@ Based on: "Fast and reliable resampling detection by spectral analysis
 of fixed linear predictor residue" (2008)
 
 Key Mathematical Foundations:
-- Resampling: s(ωχ) = Σ h(ωχ - χ)s(χ) [Eq. 3]
-- Prediction Error: e(ωχ) = s(ωχ) - Σ αₖs(ωχ + ωk) [Eq. 5]
+- Resampling: s(omega chi) = sum h(omega chi - χ)s(χ) [Eq. 3]
+- Prediction Error: e(omega chi) = s(omega chi) - sigma alpha s(omega chi + omegak) [Eq. 5]
 - Variance Periodicity: Var[e(x)] = Var[e(x + 1)] [Theorem 1]
-- P-map: p = λ exp(-|e|^τ / σ) [Eq. 21]
+- P-map: p = λ exp(-|e|^tau / sigma) [Eq. 21]
 """
 
 class KirchnerDetector:
@@ -47,20 +47,19 @@ class KirchnerDetector:
         ])
 
         # Kirchner's contrast enhancement parameters
-        # From Eq. 21: p = λ exp(-|e|^τ / σ)
-        self.lambda_param = 1.0  # λ: amplitude scaling
-        self.tau = 2.0           # τ: error sensitivity (≥ 1)
-        self.sigma = 1.0         # σ: variance scaling (> 0)
+        # From Eq. 21: p = λ exp(-|e|^tau / sigma)
+        self.lambda_param = 1.0  # amplitude scaling
+        self.tau = 2.0           # error sensitivity (≥ 1)
+        self.sigma = 1.0         # variance scaling (> 0)
 
         # Detection thresholds based on sensitivity level
-        # Empirically derived for different false acceptance rates
         thresholds = {
             'low':       {'gradient': 0.001, 'peak_ratio': 0.012, 'max_peak': 0.10},
             'medium':    {'gradient': 0.02,  'peak_ratio': 0.016, 'max_peak': 0.15},
             'high':      {'gradient': 0.04,  'peak_ratio': 0.020, 'max_peak': 0.20}
         }
 
-        t = thresholds.get(sensitivity, thresholds['high'])
+        t = thresholds.get(sensitivity, thresholds['medium'])
         self.gradient_threshold = t['gradient']
         self.peak_ratio_threshold = t['peak_ratio']
         self.max_peak_threshold = t['max_peak']
@@ -71,8 +70,8 @@ class KirchnerDetector:
         
         Process:
         1. Load and preprocess image
-        2. Apply fixed linear predictor: e(ωχ) = s(ωχ) - Σ αₖs(ωχ + ωk)
-        3. Generate contrast-enhanced p-map: p = λ exp(-|e|^τ / σ)
+        2. Apply fixed linear predictor: e(omega chi) = s(omega chi) - sum alpha s(omega chi + omegak)
+        3. Generate contrast-enhanced p-map: p = lambda exp(-|e|^tau / sigma)
         4. Compute DFT and apply contrast function
         5. Detect characteristic peaks indicating resampling
         """
@@ -80,7 +79,7 @@ class KirchnerDetector:
         img = self._load_image(img_path)
 
         # Step 2: Apply fixed linear predictor (Eq. 5)
-        # e(ωχ) = s(ωχ) - Σ αₖs(ωχ + ωk) where α₀ := 0
+        # e(omega chi) = s(omega chi) - sum  alphas(omega chi + omegak) where alpha₀ := 0
         prediction_error = cv2.filter2D(img, -1, self.predictor,
                                          borderType=cv2.BORDER_REFLECT)
 
@@ -101,19 +100,10 @@ class KirchnerDetector:
         }
 
     def _load_image(self, img_path):
-        """
-        Load and preprocess image for resampling detection.
-        
-        Preprocessing steps:
-        - Convert to grayscale if needed
-        - Resize if too large (computational efficiency)
-        - Normalize to [0,1] range
-        """
         img = np.array(Image.open(img_path))
         if len(img.shape) == 3:
             img = np.mean(img, axis=2)
 
-        # Resize large images for computational efficiency
         if max(img.shape) > 2048:
             scale = 2048 / max(img.shape)
             h, w = int(img.shape[0] * scale), int(img.shape[1] * scale)
@@ -134,7 +124,7 @@ class KirchnerDetector:
         
         Where:
         - lambda: amplitude scaling factor
-        - tau: error sensitivity parameter (≥ 1)
+        - tau: error sensitivity parameter (>= 1)
         - sigma: variance scaling parameter (> 0)
         
         Physical interpretation:
@@ -144,16 +134,13 @@ class KirchnerDetector:
         """
         abs_error = np.abs(prediction_error)
         
-        # Apply Kirchner's contrast function: p = λ * exp(- |e|^τ / σ)
+        # Apply Kirchner's contrast function: p = lambda * exp(- |e|^tau / sigma)
         p_map = self.lambda_param * np.exp(-(abs_error ** self.tau) / self.sigma)
 
-        # Normalize to [0,1] range for consistent processing
         return (p_map - p_map.min()) / (p_map.max() - p_map.min() + 1e-8)
 
     def _compute_enhanced_spectrum(self, p_map):
         """
-        Compute DFT and apply Kirchner's contrast enhancement.
-        
         Process:
         1. Center p-map (remove DC component)
         2. Apply Hanning window for spectral leakage reduction
@@ -162,7 +149,7 @@ class KirchnerDetector:
         
         Theoretical basis:
         - Periodic artifacts in p-map create distinct peaks in frequency domain
-        - Characteristic peak positions follow: |fₒ| = 0.5 - |Δ(ω) - 0.5| (Eq. 16)
+        - Characteristic peak positions follow: |fₒ| = 0.5 - |delta(omega) - 0.5| (Eq. 16)
         """
         rows, cols = p_map.shape
 
@@ -183,15 +170,13 @@ class KirchnerDetector:
 
     def _apply_contrast_function(self, spectrum):
         """
-        Apply Kirchner's contrast function for peak enhancement.
-        
         Enhancement strategy:
         1. Radial weighting to attenuate low frequencies
         2. Gamma correction for peak emphasis
         
         Radial filter design:
         - r_norm = r / (min(rows, cols) // 2): normalized radius
-        - Filter: r_norm² for r ≤ 0.5, 1.0 for r > 0.5
+        - Filter: r_norm^2 for r ≤ 0.5, 1.0 for r > 0.5
         - Suppresses DC and low-frequency noise
         """
         rows, cols = spectrum.shape
@@ -216,8 +201,6 @@ class KirchnerDetector:
 
     def _detect_peaks(self, spectrum):
         """
-        Detect characteristic resampling peaks using gradient analysis.
-        
         Detection strategy:
         1. Focus on first quadrant (avoid DC and symmetry)
         2. Exclude center region (DC component interference)
@@ -268,84 +251,6 @@ class KirchnerDetector:
                          max_peak > self.max_peak_threshold)
 
         return gradient_detected or peak_detected
-
-    def visualize_kirchner_analysis(self, img_path, save_path=None):
-        """
-        Comprehensive visualization of Kirchner analysis results.
-        
-        Displays:
-        1. P-map: Probability map showing periodic artifacts
-        2. Prediction Error: Raw predictor residual
-        3. Enhanced Spectrum: Log-scale frequency domain representation
-        4. Error Distribution: Statistical analysis of prediction errors
-        """
-        result = self.detect(img_path)
-
-        fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-
-        status = "DETECTED" if result['detected'] else "NOT DETECTED"
-        fig.suptitle(f'Kirchner Analysis: {status}',
-                     fontsize=14, fontweight='bold',
-                     color='red' if result['detected'] else 'green')
-
-        # 1. P-map visualization
-        im1 = axes[0, 0].imshow(result['p_map'], cmap='gray', vmin=0, vmax=1)
-        axes[0, 0].set_title('Probability Map (p-map)')
-        axes[0, 0].set_xlabel('Pixel Column')
-        axes[0, 0].set_ylabel('Pixel Row')
-        plt.colorbar(im1, ax=axes[0, 0], shrink=0.8)
-
-        # 2. Prediction Error visualization
-        error_range = np.percentile(result['prediction_error'], [5, 95])
-        im2 = axes[0, 1].imshow(result['prediction_error'], cmap='RdBu_r',
-                                 vmin=error_range[0], vmax=error_range[1])
-        axes[0, 1].set_title('Prediction Error')
-        axes[0, 1].set_xlabel('Pixel Column')
-        axes[0, 1].set_ylabel('Pixel Row')
-        plt.colorbar(im2, ax=axes[0, 1], shrink=0.8)
-
-        # 3. Enhanced Spectrum (log scale)
-        rows, cols = result['spectrum'].shape
-        freq_x = np.linspace(-0.5, 0.5, cols)
-        freq_y = np.linspace(-0.5, 0.5, rows)
-
-        # Fix the custom_vmin issue
-        spectrum_min = result['spectrum'][result['spectrum'] > 0].min() if np.any(result['spectrum'] > 0) else 1e-6
-        
-        im3 = axes[1, 0].imshow(result['spectrum'], cmap='inferno',
-                                norm=LogNorm(vmin=spectrum_min, vmax=result['spectrum'].max()),
-                                extent=[freq_x[0], freq_x[-1], freq_y[-1], freq_y[0]],
-                                origin='lower')
-        axes[1, 0].set_title('Enhanced Spectrum (Log Scale)')
-        axes[1, 0].set_xlabel('Normalized Frequency (f₁)')
-        axes[1, 0].set_ylabel('Normalized Frequency (f₂)')
-        axes[1, 0].axhline(0, color='white', alpha=0.5, linewidth=0.5)
-        axes[1, 0].axvline(0, color='white', alpha=0.5, linewidth=0.5)
-        plt.colorbar(im3, ax=axes[1, 0], shrink=0.8)
-
-        # 4. Error Distribution analysis
-        error_flat = result['prediction_error'].flatten()
-        axes[1, 1].hist(error_flat, bins=50, alpha=0.7, edgecolor='black', density=True)
-        axes[1, 1].axvline(np.mean(error_flat), color='red', linestyle='--', 
-                          label=f'Mean: {np.mean(error_flat):.3f}')
-        axes[1, 1].axvline(np.std(error_flat), color='blue', linestyle='--', 
-                          label=f'Std: {np.std(error_flat):.3f}')
-        axes[1, 1].set_title('Prediction Error Distribution')
-        axes[1, 1].set_xlabel('Error Value')
-        axes[1, 1].set_ylabel('Density')
-        axes[1, 1].legend()
-        axes[1, 1].grid(True, alpha=0.3)
-
-        plt.tight_layout()
-        
-        if save_path:
-            plt.savefig(save_path, dpi=100, bbox_inches='tight')
-            plt.close()
-        else:
-            plt.show()
-
-        return result
-
 
 def save_visualization(filename, p_map, spectrum, prediction_error, detected, output_folder):
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
@@ -403,11 +308,9 @@ class BatchProcessor:
         self.max_workers = max_workers
         self.test_all_sensitivities = test_all_sensitivities
         self.supported_formats = {'.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp', '.webp'}
-
         self.output_folder.mkdir(parents=True, exist_ok=True)
 
     def scan_images(self):
-        """Recursively scan for supported image formats."""
         images = []
         for file_path in self.input_folder.rglob('*'):
             if file_path.is_file() and file_path.suffix.lower() in self.supported_formats:
@@ -426,9 +329,7 @@ class BatchProcessor:
                     detector = KirchnerDetector(sensitivity=sensitivity)
                     result = detector.detect(str(img_path))
                     
-                    # Extract detailed metrics for comparison
                     metrics = self._extract_detection_metrics(result['spectrum'], detector)
-                    
                     results[sensitivity] = {
                         'detected': result['detected'],
                         'p_map': result['p_map'],
@@ -570,9 +471,7 @@ class BatchProcessor:
                     except Exception as e:
                         print(f"Warning: Could not create visualization for {result['file_name']}: {e}")
 
-        # Print summary statistics
         total_time = time.time() - start_time
-        
         if self.test_all_sensitivities:
             detected_low = sum(1 for r in results if r.get('detected_low'))
             detected_medium = sum(1 for r in results if r.get('detected_medium'))
@@ -600,7 +499,6 @@ class BatchProcessor:
         return df
 
     def _create_results_dataframe(self, results):
-        """Create pandas DataFrame from processing results."""
         if not results:
             return pd.DataFrame()
             
@@ -647,14 +545,6 @@ class BatchProcessor:
             return pd.DataFrame(results)
 
     def _create_multi_sensitivity_visualization(self, result, vis_folder):
-        """
-        Create clean multi-sensitivity visualization.
-        
-        Shows only essential information:
-        1. Single P-map (identical across sensitivities)
-        2. Single enhanced spectrum (identical across sensitivities)  
-        3. Detailed threshold analysis table
-        """
         filename = result['file_name']
         multi_results = result['multi_sensitivity_results']
         detailed_metrics = result['detailed_metrics']
@@ -730,59 +620,40 @@ class BatchProcessor:
                 ]
                 table_data.append(row)
             
-            # Create table with better spacing
             table = ax_table.table(cellText=table_data, colLabels=headers,
                                   cellLoc='center', loc='center',
                                   bbox=[0, 0.0, 1, 1.0])
-            
-            # Auto-size font and adjust scaling
             table.auto_set_font_size(True)
             table.set_fontsize(8)
             table.scale(1.2, 2.5)
             
-            # Adjust column widths to prevent overlap
             cellDict = table.get_celld()
             for i in range(len(headers)):
-                for j in range(len(table_data) + 1):  # +1 for header
-                    cellDict[(j, i)].set_width(0.09)  # Equal width for all columns
+                for j in range(len(table_data) + 1):  
+                    cellDict[(j, i)].set_width(0.09)  
                     cellDict[(j, i)].set_height(0.15)
             
-            # Color code the results
             for i, row in enumerate(table_data):
-                # Color final result column
                 if "DETECTED" in row[-1]:
                     table[(i+1, len(headers)-1)].set_facecolor('#ffdddd')
                 else:
                     table[(i+1, len(headers)-1)].set_facecolor('#ddffdd')
-                
-                # Color individual detection results (✓/✗ columns)
                 for j, cell in enumerate(row):
                     if cell == "✓":
                         table[(i+1, j)].set_facecolor('#ddffdd')
                     elif cell == "✗":
                         table[(i+1, j)].set_facecolor('#ffdddd')
             
-            # Style the header row
             for j in range(len(headers)):
                 table[(0, j)].set_facecolor('#e6e6e6')
                 table[(0, j)].set_text_props(weight='bold')
 
-        # Save the clean plot
         output_path = vis_folder / f'{filename.split(".")[0]}_multi_sensitivity_analysis.png'
         plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='white')
         plt.close(fig)
 
 
 def quick_scan(input_folder, output_folder=None, sensitivity='medium', test_all_sensitivities=False):
-    """
-    Quick scanning interface for immediate analysis.
-    
-    Args:
-        input_folder: Path to folder containing images
-        output_folder: Output directory (auto-generated if None)
-        sensitivity: Single sensitivity level ('low', 'medium', 'high')
-        test_all_sensitivities: If True, tests all sensitivity levels for comparison
-    """
     if output_folder is None:
         timestamp = time.strftime('%Y%m%d_%H%M%S')
         suffix = "_multi_sensitivity" if test_all_sensitivities else ""
@@ -793,12 +664,6 @@ def quick_scan(input_folder, output_folder=None, sensitivity='medium', test_all_
 
 
 def quick_scan_all_sensitivities(input_folder, output_folder=None):
-    """
-    Convenience function for multi-sensitivity batch analysis.
-    
-    Tests all sensitivity levels (low, medium, high) and creates
-    comprehensive comparison visualizations for each image.
-    """
     return quick_scan(input_folder, output_folder, test_all_sensitivities=True)
 
 
@@ -823,107 +688,6 @@ def detect_single_image(image_path, sensitivity='medium', save_plot=False):
         print(f"Plot saved to: {output_folder}")
 
     return result['detected']
-
-
-def test_kirchner_sensitivity(img_path):
-    print(f"Testing Kirchner detector on: {img_path}")
-    print("=" * 50)
-
-    base_path = Path('.')
-    img_name = Path(img_path).stem
-    timestamp = time.strftime('%Y%m%d_%H%M%S')
-
-    test_folder = base_path / f"test_results_{img_name}_{timestamp}"
-    test_folder.mkdir(parents=True, exist_ok=True)
-
-    detection_metrics = {}
-
-    for sensitivity in ['low', 'medium', 'high']:
-        detector = KirchnerDetector(sensitivity=sensitivity)
-
-        result = detector.detect(img_path)
-        rows, cols = result['spectrum'].shape
-        center_r, center_c = rows // 2, cols // 2
-
-        exclude_radius = min(rows, cols) // 10
-        y, x = np.ogrid[:rows, :cols]
-        distance = np.sqrt((x - center_c)**2 + (y - center_r)**2)
-        mask = distance >= exclude_radius
-        first_quad = result['spectrum'][center_r:, center_c:]
-        quad_mask = mask[center_r:, center_c:]
-
-        if np.any(quad_mask):
-            values = first_quad[quad_mask]
-            if len(values) > 0:
-                sorted_vals = np.sort(values)
-                cumulative = np.cumsum(sorted_vals)
-                cumulative = cumulative / (cumulative[-1] + 1e-8)
-
-                max_gradient = np.max(np.diff(cumulative)) if len(cumulative) > 1 else 0
-                mean_val = np.mean(values)
-                max_peak = np.max(values)
-                threshold = mean_val + 3 * np.std(values)
-                peak_ratio = np.sum(values > threshold) / len(values)
-
-                detection_metrics[sensitivity] = {
-                    'max_gradient': max_gradient,
-                    'gradient_threshold': detector.gradient_threshold,
-                    'peak_ratio': peak_ratio,
-                    'peak_ratio_threshold': detector.peak_ratio_threshold,
-                    'max_peak': max_peak,
-                    'max_peak_threshold': detector.max_peak_threshold
-                }
-
-                save_visualization(
-                    f"{img_name}_{sensitivity}",
-                    result['p_map'],
-                    result['spectrum'],
-                    result['prediction_error'],
-                    result['detected'],
-                    test_folder
-                )
-
-        status = "DETECTED" if result['detected'] else "NOT DETECTED"
-        print(f"{sensitivity.upper():>6}: {status}")
-
-    print("\nDetection Metrics:")
-    print("-" * 50)
-
-    metrics_data = []
-
-    for sensitivity, metrics in detection_metrics.items():
-        print(f"\n{sensitivity.upper()} SENSITIVITY:")
-
-        gradient_detected = metrics['max_gradient'] > metrics['gradient_threshold']
-        print(f"  Max Gradient: {metrics['max_gradient']:.6f} (Threshold: {metrics['gradient_threshold']:.6f}) -> {'DETECTED' if gradient_detected else 'not detected'}")
-
-        peak_ratio_detected = metrics['peak_ratio'] > metrics['peak_ratio_threshold']
-        print(f"  Peak Ratio: {metrics['peak_ratio']:.6f} (Threshold: {metrics['peak_ratio_threshold']:.6f}) -> {'DETECTED' if peak_ratio_detected else 'not detected'}")
-
-        max_peak_detected = metrics['max_peak'] > metrics['max_peak_threshold']
-        print(f"  Max Peak: {metrics['max_peak']:.6f} (Threshold: {metrics['max_peak_threshold']:.6f}) -> {'DETECTED' if max_peak_detected else 'not detected'}")
-
-        metrics_data.append({
-            'sensitivity': sensitivity,
-            'max_gradient': metrics['max_gradient'],
-            'gradient_threshold': metrics['gradient_threshold'],
-            'gradient_detected': gradient_detected,
-            'peak_ratio': metrics['peak_ratio'],
-            'peak_ratio_threshold': metrics['peak_ratio_threshold'],
-            'peak_ratio_detected': peak_ratio_detected,
-            'max_peak': metrics['max_peak'],
-            'max_peak_threshold': metrics['max_peak_threshold'],
-            'max_peak_detected': max_peak_detected
-        })
-
-    metrics_df = pd.DataFrame(metrics_data)
-    metrics_df.to_csv(test_folder / f"{img_name}_metrics.csv", index=False)
-
-    print("=" * 50)
-    print(f"Test results saved to: {test_folder}")
-
-    return test_folder
-
 
 def run_demo():
     """Run demonstration with sample images, including multi-sensitivity testing."""
@@ -967,42 +731,23 @@ def run_demo():
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
-        if sys.argv[1] == "test":
-            if len(sys.argv) > 2:
-                test_kirchner_sensitivity(sys.argv[2])
-            else:
-                print("Usage: python kirchner.py test path/to/image.jpg")
-        elif sys.argv[1] == "batch":
-            if len(sys.argv) > 2:
-                input_folder = sys.argv[2]
-                output_folder = sys.argv[3] if len(sys.argv) > 3 else None
-                
-                test_all = "--all-sensitivities" in sys.argv
-                
-                if test_all:
-                    print("Running batch processing with ALL sensitivity levels...")
-                    results = quick_scan_all_sensitivities(input_folder, output_folder)
-                else:
-                    sensitivity = 'medium'  # Default
-                    if '--sensitivity' in sys.argv:
-                        idx = sys.argv.index('--sensitivity')
-                        if idx + 1 < len(sys.argv):
-                            sensitivity = sys.argv[idx + 1]
-                    
-                    print(f"Running batch processing with {sensitivity.upper()} sensitivity...")
-                    results = quick_scan(input_folder, output_folder, sensitivity)
-                
-                print("Batch processing completed!")
-            else:
-                print("Usage: python kirchner.py batch input_folder [output_folder] [--all-sensitivities] [--sensitivity low|medium|high]")
-                print("Examples:")
-                print("  python kirchner.py batch ./images")
-                print("  python kirchner.py batch ./images ./results --all-sensitivities")
-                print("  python kirchner.py batch ./images --sensitivity high")
+        input_folder = sys.argv[2]
+        output_folder = sys.argv[3] if len(sys.argv) > 3 else None
+        test_all = "--all-sensitivities" in sys.argv
+        
+        if test_all:
+            print("Running batch processing with ALL sensitivity levels...")
+            results = quick_scan_all_sensitivities(input_folder, output_folder)
         else:
-            print("Available commands:")
-            print("  python kirchner.py test path/to/image.jpg")
-            print("  python kirchner.py batch input_folder [options]")
-            print("  python kirchner.py  (runs demo)")
+            sensitivity = 'medium'  
+            if '--sensitivity' in sys.argv:
+                idx = sys.argv.index('--sensitivity')
+                if idx + 1 < len(sys.argv):
+                    sensitivity = sys.argv[idx + 1]
+            
+            print(f"Running batch processing with {sensitivity.upper()} sensitivity...")
+            results = quick_scan(input_folder, output_folder, sensitivity)
+        
+        print("Batch processing completed!")
     else:
         run_demo()
