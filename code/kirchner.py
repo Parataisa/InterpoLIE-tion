@@ -10,49 +10,50 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from scipy.fft import fft2, fftshift
-from scipy.ndimage import gaussian_filter
+from scipy.ndimage import gaussian_filter, convolve
 from PIL import Image
 from matplotlib.colors import LogNorm
 
 matplotlib.use('Agg')
 
 """
-Enhanced Kirchner fast resampling detector implementation
+Kirchner fast resampling detector implementation
 Based on: "Fast and reliable resampling detection by spectral analysis 
 of fixed linear predictor residue" (2008)
 
 Key Mathematical Foundations:
-- Resampling: s(omega chi) = sum h(omega chi - χ)s(χ) [Eq. 3]
-- Prediction Error: e(omega chi) = s(omega chi) - sigma alpha s(omega chi + omegak) [Eq. 5]
+- Resampling: s(omega * chi) = sum h(omega * chi - chi_k) * s(chi_k) [Eq. 3]
+- Prediction Error: e(omega * chi) = s(omega * chi) - sigma alpha_k * s(omega * chi + omega * k) [Eq. 5]
 - Variance Periodicity: Var[e(x)] = Var[e(x + 1)] [Theorem 1]
-- P-map: p = λ exp(-|e|^tau / sigma) [Eq. 21]
+- P-map: p = lambda_param * exp(-|e|^tau / sigma) [Eq. 21]
 """
 
 class KirchnerDetector:
-    def __init__(self, sensitivity='medium'):
+    def __init__(self, sensitivity='medium', lambda_param=1.0, tau=2.0, sigma=1.0, threshold_factor=10.0):
         """
         Initialize Kirchner detector with fixed linear predictor.
         
-        Fixed predictor coefficients (Kirchner's optimal choice):
-        Based on second-order derivative approximation for optimal 
-        periodic artifact detection in resampled signals.
+        Args:
+            sensitivity: Detection sensitivity ('low', 'medium', 'high')
+            lambda_param: P-map amplitude scaling factor
+            tau: Error sensitivity parameter (>= 1) 
+            sigma: Variance scaling parameter (> 0)
+            threshold_factor: Peak detection threshold multiplier
         """
-        # Fixed predictor coefficients - approximates second-order derivative
-        # Theoretical basis: Maximizes detection of linear dependencies
-        # introduced by interpolation during resampling
-        self.predictor = np.array([
-            [-0.25,  0.50, -0.25],
-            [ 0.50,  0.00,  0.50],
-            [-0.25,  0.50, -0.25]
+        # Kirchner's fixed 3x3 linear predictor filter
+        self.predictor_filter = np.array([
+            [-0.25, 0.50, -0.25],
+            [0.50,  0.00,  0.50],
+            [-0.25, 0.50, -0.25]
         ])
+        
+        # P-map generation parameters
+        self.lambda_param = lambda_param
+        self.tau = tau
+        self.sigma = sigma
+        self.threshold_factor = threshold_factor
 
-        # Kirchner's contrast enhancement parameters
-        # From Eq. 21: p = λ exp(-|e|^tau / sigma)
-        self.lambda_param = 1.0  # amplitude scaling
-        self.tau = 2.0           # error sensitivity (≥ 1)
-        self.sigma = 1.0         # variance scaling (> 0)
-
-        # Detection thresholds based on sensitivity level
+        # Detection thresholds based on sensitivity level for fallback analysis
         thresholds = {
             'low':       {'gradient': 0.001, 'peak_ratio': 0.012, 'max_peak': 0.10},
             'medium':    {'gradient': 0.02,  'peak_ratio': 0.016, 'max_peak': 0.15},
@@ -63,204 +64,278 @@ class KirchnerDetector:
         self.gradient_threshold = t['gradient']
         self.peak_ratio_threshold = t['peak_ratio']
         self.max_peak_threshold = t['max_peak']
+        self.sensitivity = sensitivity
 
     def detect(self, img_path):
         """
-        Main detection pipeline implementing Kirchner's algorithm.
+        Main detection pipeline implementing Kirchner's 6-step algorithm.
         
-        Process:
-        1. Load and preprocess image
-        2. Apply fixed linear predictor: e(omega chi) = s(omega chi) - sum alpha s(omega chi + omegak)
-        3. Generate contrast-enhanced p-map: p = lambda exp(-|e|^tau / sigma)
-        4. Compute DFT and apply contrast function
-        5. Detect characteristic peaks indicating resampling
+        Args:
+            img_path: Path to image file
+            
+        Returns:
+            dict: Detection results compatible with existing pipeline
         """
-        # Step 1: Load and preprocess image
-        img = self._load_image(img_path)
+        try:
+            # Load image first
+            print(f"      Loading image: {Path(img_path).name}")
+            image = self._load_image(img_path)
+            print(f"      Image shape: {image.shape}")
+            
+            # Run 6-step detection
+            print(f"      Running 6-step detection...")
+            results = self.detect_resampling(image)
+            print(f"      Detection complete: {results['decision']}")
+            
+            # Return in expected format for compatibility
+            return {
+                'detected': results['decision'],
+                'p_map': results['p_map'],
+                'spectrum': results['spectrum'],
+                'prediction_error': results['error']
+            }
+        except Exception as e:
+            print(f"      ERROR in detect(): {e}")
+            raise
 
-        # Step 2: Apply fixed linear predictor (Eq. 5)
-        # e(omega chi) = s(omega chi) - sum  alphas(omega chi + omegak) where alpha₀ := 0
-        prediction_error = cv2.filter2D(img, -1, self.predictor,
-                                         borderType=cv2.BORDER_REFLECT)
-
-        # Step 3: Generate contrast-enhanced p-map (Eq. 21)
-        p_map = self._generate_kirchner_pmap(prediction_error)
-
-        # Step 4: Compute DFT and apply contrast function
-        enhanced_spectrum = self._compute_enhanced_spectrum(p_map)
-
-        # Step 5: Detect peaks using gradient analysis
-        is_resampled = self._detect_peaks(enhanced_spectrum)
-
-        return {
-            'detected': is_resampled,
-            'p_map': p_map,
-            'spectrum': enhanced_spectrum,
-            'prediction_error': prediction_error
-        }
+    def detect_resampling(self, image):
+        """
+        Main detection function following Kirchner's 6-step recipe
+        
+        Args:
+            image: Grayscale image (2D numpy array)
+            
+        Returns:
+            dict: Detection results with p_map, spectrum, peaks, decision
+        """
+        try:
+            # Step 1: Input preparation
+            print(f"        Step 1: Input preparation")
+            if len(image.shape) == 3:
+                image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            image = image.astype(np.float64)
+            
+            # Step 2: Apply fixed linear predictor
+            print(f"        Step 2: Applying predictor filter")
+            predicted = convolve(image, self.predictor_filter, mode='reflect')
+            
+            # Step 3: Calculate prediction error
+            print(f"        Step 3: Computing prediction error")
+            error = image - predicted
+            
+            # Step 4: Generate contrast-enhanced P-map
+            print(f"        Step 4: Generating P-map")
+            p_map = self._generate_p_map(error)
+            
+            # Step 5: Spectral analysis via DFT
+            print(f"        Step 5: Computing spectrum")
+            spectrum = self._compute_spectrum(p_map)
+            
+            # Step 6: Peak detection and decision
+            print(f"        Step 6: Peak detection")
+            peaks = self._detect_peaks(spectrum)
+            decision = self._make_decision(peaks)
+            print(f"        Final decision: {decision}")
+            
+            results = {
+                'p_map': p_map,
+                'spectrum': spectrum,
+                'peaks': peaks,
+                'decision': decision,
+                'error': error,
+                'max_peak_strength': np.max(peaks['strengths']) if peaks['strengths'] else 0
+            }
+            
+            return results
+        except Exception as e:
+            print(f"        ERROR in detect_resampling: {e}")
+            raise
 
     def _load_image(self, img_path):
-        img = np.array(Image.open(img_path))
-        if len(img.shape) == 3:
-            img = np.mean(img, axis=2)
+        """Load and preprocess image with size constraints."""
+        try:
+            if isinstance(img_path, str):
+                img = np.array(Image.open(img_path))
+            else:
+                img = np.array(Image.open(str(img_path)))
+                
+            if len(img.shape) == 3:
+                img = np.mean(img, axis=2)
 
-        if max(img.shape) > 2048:
-            scale = 2048 / max(img.shape)
-            h, w = int(img.shape[0] * scale), int(img.shape[1] * scale)
-            img = cv2.resize(img, (w, h))
+            if max(img.shape) > 2048:
+                scale = 2048 / max(img.shape)
+                h, w = int(img.shape[0] * scale), int(img.shape[1] * scale)
+                img = cv2.resize(img, (w, h))
 
-        img = img.astype(np.float64)
-        if img.max() > 1:
-            img /= 255.0
+            img = img.astype(np.float64)
+            if img.max() > 1:
+                img /= 255.0
 
-        return img
+            return img
+        except Exception as e:
+            print(f"Error loading image {img_path}: {e}")
+            raise
 
-    def _generate_kirchner_pmap(self, prediction_error):
-        """
-        Generate p-map using Kirchner's contrast function.
-        
-        Mathematical formula (Eq. 21):
-        p = lambda * exp(- |error|^tau / sigma)
-        
-        Where:
-        - lambda: amplitude scaling factor
-        - tau: error sensitivity parameter (>= 1)
-        - sigma: variance scaling parameter (> 0)
-        
-        Physical interpretation:
-        - Large prediction errors → small p-map values (low probability)
-        - Small prediction errors → large p-map values (high probability)
-        - Periodic variations in error create periodic p-map patterns
-        """
-        abs_error = np.abs(prediction_error)
-        
-        # Apply Kirchner's contrast function: p = lambda * exp(- |e|^tau / sigma)
+    def _generate_p_map(self, error):
+        """Step 4: Generate contrast-enhanced probability map"""
+        # Kirchner's contrast function: p = lambda_param * exp(-|e|^tau / sigma)
+        abs_error = np.abs(error)
         p_map = self.lambda_param * np.exp(-(abs_error ** self.tau) / self.sigma)
-
+        
+        # Normalize for consistency with other parts of pipeline
         return (p_map - p_map.min()) / (p_map.max() - p_map.min() + 1e-8)
 
-    def _compute_enhanced_spectrum(self, p_map):
-        """
-        Process:
-        1. Center p-map (remove DC component)
-        2. Apply Hanning window for spectral leakage reduction
-        3. Compute 2D DFT with fftshift for centered spectrum
-        4. Apply radial contrast function for peak enhancement
+    def _compute_spectrum(self, p_map):
+        """Step 5: Compute frequency spectrum using DFT"""
+        # Apply 2D FFT and shift zero frequency to center
+        fft_result = fft2(p_map)
+        spectrum = np.abs(fftshift(fft_result))
         
-        Theoretical basis:
-        - Periodic artifacts in p-map create distinct peaks in frequency domain
-        - Characteristic peak positions follow: |fₒ| = 0.5 - |delta(omega) - 0.5| (Eq. 16)
-        """
-        rows, cols = p_map.shape
-
-        # Remove DC component and apply windowing
-        p_map_centered = p_map - np.mean(p_map)
-        window = np.outer(np.hanning(rows), np.hanning(cols))
-        windowed = p_map_centered * window
-
-        # Compute DFT with centered spectrum
-        spectrum = fft2(windowed)
-        spectrum = fftshift(spectrum)
-        magnitude_spectrum = np.abs(spectrum)
-        
-        # Apply contrast function for peak enhancement
-        enhanced = self._apply_contrast_function(magnitude_spectrum)
-
-        return enhanced
-
-    def _apply_contrast_function(self, spectrum):
-        """
-        Enhancement strategy:
-        1. Radial weighting to attenuate low frequencies
-        2. Gamma correction for peak emphasis
-        
-        Radial filter design:
-        - r_norm = r / (min(rows, cols) // 2): normalized radius
-        - Filter: r_norm^2 for r ≤ 0.5, 1.0 for r > 0.5
-        - Suppresses DC and low-frequency noise
-        """
-        rows, cols = spectrum.shape
-        center_r, center_c = rows // 2, cols // 2
-
-        # Create radial coordinate system
-        y, x = np.ogrid[:rows, :cols]
-        r = np.sqrt((x - center_c)**2 + (y - center_r)**2)
-        r_norm = r / (min(rows, cols) // 2)
-
-        # Apply radial weighting function
-        # Attenuates low frequencies while preserving high frequencies
-        radial_filter = np.where(r_norm <= 0.5, r_norm**2, 1.0)
-        filtered = spectrum * radial_filter
-
-        # Gamma correction for peak enhancement
-        gamma = 0.5
-        normalized = filtered / (np.max(filtered) + 1e-8)
-        gamma_corrected = normalized ** gamma
-
-        return gamma_corrected
+        # Normalize spectrum
+        spectrum = spectrum / (np.max(spectrum) + 1e-8)
+        return spectrum
 
     def _detect_peaks(self, spectrum):
-        """
-        Detection strategy:
-        1. Focus on first quadrant (avoid DC and symmetry)
-        2. Exclude center region (DC component interference)
-        3. Analyze cumulative distribution of spectral values
-        4. Detect sharp transitions indicating distinct peaks
+        """Step 6a: Detect characteristic peaks in spectrum (optimized version)"""
+        print(f"        Detecting peaks in spectrum shape: {spectrum.shape}")
         
-        Mathematical basis:
-        - Resampled signals exhibit periodic artifacts with period = original sampling rate
-        - Aliasing creates characteristic peak patterns in frequency domain
-        - Sharp gradients in cumulative periodogram indicate distinct peaks
-        """
+        peaks = {
+            'positions': [],
+            'strengths': [],
+            'frequencies': []
+        }
+        
+        # Get spectrum center and create frequency grid
+        center = np.array(spectrum.shape) // 2
+        h, w = spectrum.shape
+        
+        # Optimize: Only search in reduced area and skip pixels for large images
+        step_size = max(1, min(h, w) // 200)  # Adaptive step size
+        search_range_h = min(h-10, center[0] + h//4)
+        search_range_w = min(w-10, center[1] + w//4)
+        
+        print(f"        Search area: {search_range_h}x{search_range_w}, step_size: {step_size}")
+        
+        peak_count = 0
+        max_peaks = 50  # Limit number of peaks to prevent infinite processing
+        
+        # Search for peaks (excluding DC component) with adaptive step size
+        for i in range(5, search_range_h, step_size):
+            for j in range(5, search_range_w, step_size):
+                if peak_count >= max_peaks:
+                    break
+                    
+                # Skip DC component area
+                if abs(i - center[0]) < 3 and abs(j - center[1]) < 3:
+                    continue
+                
+                # Check if current point is a local maximum
+                local_region = spectrum[max(0, i-2):min(h, i+3), max(0, j-2):min(w, j+3)]
+                if local_region.size == 0:
+                    continue
+                    
+                local_max = np.max(local_region)
+                local_mean = np.mean(local_region)
+                
+                # Peak detection criterion: peak > threshold_factor * local_average
+                if (spectrum[i, j] == local_max and 
+                    local_mean > 0 and  # Avoid division by zero
+                    spectrum[i, j] > self.threshold_factor * local_mean and
+                    spectrum[i, j] > 0.1):  # Minimum absolute threshold
+                    
+                    peaks['positions'].append((i, j))
+                    peaks['strengths'].append(spectrum[i, j])
+                    
+                    # Calculate normalized frequency
+                    freq_x = (j - center[1]) / w
+                    freq_y = (i - center[0]) / h
+                    peaks['frequencies'].append((freq_x, freq_y))
+                    
+                    peak_count += 1
+            
+            if peak_count >= max_peaks:
+                break
+        
+        print(f"        Found {len(peaks['strengths'])} peaks")
+        return peaks
+
+    def _make_decision(self, peaks):
+        """Step 6b: Make final resampling decision"""
+        if not peaks['strengths']:
+            return False
+        
+        # Decision based on strongest peak
+        max_strength = np.max(peaks['strengths'])
+        
+        # Threshold for resampling detection (empirically determined)
+        decision_threshold = 0.15
+        
+        return max_strength > decision_threshold
+
+    def extract_detection_metrics(self, spectrum):
+        """Extract detailed metrics for analysis."""
+        # Try new peak detection method first
+        peaks = self._detect_peaks(spectrum)
+        
+        # Fallback to gradient analysis for compatibility
         rows, cols = spectrum.shape
         center_r, center_c = rows // 2, cols // 2
 
-        # Exclude center region to avoid DC component interference
         exclude_radius = min(rows, cols) // 10
         y, x = np.ogrid[:rows, :cols]
         distance = np.sqrt((x - center_c)**2 + (y - center_r)**2)
         mask = distance >= exclude_radius
-
-        # Focus on first quadrant for peak analysis
         first_quad = spectrum[center_r:, center_c:]
         quad_mask = mask[center_r:, center_c:]
 
         if not np.any(quad_mask):
-            return False
-
+            return None
+            
         values = first_quad[quad_mask]
         if len(values) == 0:
-            return False
+            return None
 
-        # Compute cumulative distribution for gradient analysis
-        # Sharp transitions indicate characteristic peaks
         sorted_vals = np.sort(values)
         cumulative = np.cumsum(sorted_vals)
         cumulative = cumulative / (cumulative[-1] + 1e-8)
 
-        # Peak detection using multiple criteria
         max_gradient = np.max(np.diff(cumulative)) if len(cumulative) > 1 else 0
         mean_val = np.mean(values)
         max_peak = np.max(values)
         threshold = mean_val + 3 * np.std(values)
         peak_ratio = np.sum(values > threshold) / len(values)
 
-        # Apply detection thresholds
-        gradient_detected = max_gradient > self.gradient_threshold
-        peak_detected = (peak_ratio > self.peak_ratio_threshold and
-                         max_peak > self.max_peak_threshold)
+        # Combine new peak method with gradient analysis
+        peak_count = len(peaks['strengths']) if isinstance(peaks, dict) else 0
+        max_peak_strength = np.max(peaks['strengths']) if peak_count > 0 else max_peak
 
-        return gradient_detected or peak_detected
+        return {
+            'max_gradient': max_gradient,
+            'gradient_threshold': self.gradient_threshold,
+            'gradient_detected': max_gradient > self.gradient_threshold,
+            'peak_ratio': peak_ratio,
+            'peak_ratio_threshold': self.peak_ratio_threshold,
+            'peak_ratio_detected': peak_ratio > self.peak_ratio_threshold,
+            'max_peak': max_peak_strength,
+            'max_peak_threshold': self.max_peak_threshold,
+            'max_peak_detected': max_peak_strength > self.max_peak_threshold,
+            'peak_count': peak_count,
+            'kirchner_peaks': peak_count > 0
+        }
+
 
 def save_visualization(filename, p_map, spectrum, prediction_error, detected, output_folder):
+    """Save comprehensive visualization of detection results."""
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
     fig.suptitle(f'{filename} - {"DETECTED" if detected else "NOT DETECTED"}',
                  fontsize=14, fontweight='bold',
                  color='red' if detected else 'green')
 
     # 1. P-map 
-    im1 = axes[0, 0].imshow(p_map, cmap='gray', vmin=0, vmax=1)
-    axes[0, 0].set_title('Probability Map')
+    im1 = axes[0, 0].imshow(p_map, cmap='hot', vmin=0, vmax=1)
+    axes[0, 0].set_title('Probability Map (P-Map)')
+    axes[0, 0].set_xlabel('Pixel Column')
+    axes[0, 0].set_ylabel('Pixel Row')
     plt.colorbar(im1, ax=axes[0, 0], shrink=0.8)
 
     # 2. Prediction Error
@@ -268,9 +343,11 @@ def save_visualization(filename, p_map, spectrum, prediction_error, detected, ou
     im2 = axes[0, 1].imshow(prediction_error, cmap='RdBu_r',
                             vmin=error_range[0], vmax=error_range[1])
     axes[0, 1].set_title('Prediction Error')
+    axes[0, 1].set_xlabel('Pixel Column')
+    axes[0, 1].set_ylabel('Pixel Row')
     plt.colorbar(im2, ax=axes[0, 1], shrink=0.8)
 
-    # 3. Enhanced Spectrum
+    # 3. Spectrum (with log scale for better visibility)
     rows, cols = spectrum.shape
     freq_x = np.linspace(-0.5, 0.5, cols)
     freq_y = np.linspace(-0.5, 0.5, rows)
@@ -281,17 +358,29 @@ def save_visualization(filename, p_map, spectrum, prediction_error, detected, ou
                              norm=LogNorm(vmin=spectrum_min, vmax=spectrum.max()),
                              extent=[freq_x[0], freq_x[-1], freq_y[-1], freq_y[0]],
                              origin='lower')
-    axes[1, 0].set_title('Log Spectrum')
-    axes[1, 0].axhline(0, color='white', alpha=0.5)
-    axes[1, 0].axvline(0, color='white', alpha=0.5)
+    axes[1, 0].set_title('Frequency Spectrum (Log Scale)')
+    axes[1, 0].set_xlabel('Normalized Frequency f_x')
+    axes[1, 0].set_ylabel('Normalized Frequency f_y')
+    axes[1, 0].axhline(0, color='white', alpha=0.5, linewidth=0.5)
+    axes[1, 0].axvline(0, color='white', alpha=0.5, linewidth=0.5)
     plt.colorbar(im3, ax=axes[1, 0], shrink=0.8)
 
-    # 4. Error Distribution
+    # 4. Error Distribution with statistics
     error_flat = prediction_error.flatten()
-    axes[1, 1].hist(error_flat, bins=50, alpha=0.7, edgecolor='black')
-    axes[1, 1].axvline(np.mean(error_flat), color='red', linestyle='--')
-    axes[1, 1].set_title('Error Distribution')
+    n_bins = min(50, int(np.sqrt(len(error_flat))))
+    axes[1, 1].hist(error_flat, bins=n_bins, alpha=0.7, edgecolor='black', density=True)
+    axes[1, 1].axvline(np.mean(error_flat), color='red', linestyle='--', linewidth=2, label='Mean')
+    axes[1, 1].axvline(np.median(error_flat), color='orange', linestyle='--', linewidth=2, label='Median')
+    axes[1, 1].set_title('Prediction Error Distribution')
+    axes[1, 1].set_xlabel('Error Value')
+    axes[1, 1].set_ylabel('Density')
+    axes[1, 1].legend()
     axes[1, 1].grid(True, alpha=0.3)
+    
+    # Add statistics text
+    stats_text = f'μ={np.mean(error_flat):.4f}\nσ={np.std(error_flat):.4f}'
+    axes[1, 1].text(0.02, 0.98, stats_text, transform=axes[1, 1].transAxes, 
+                    verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
 
     plt.tight_layout()
 
@@ -301,16 +390,18 @@ def save_visualization(filename, p_map, spectrum, prediction_error, detected, ou
 
 
 class BatchProcessor:
-    def __init__(self, input_folder, output_folder, sensitivity='medium', max_workers=12, test_all_sensitivities=False):
+    def __init__(self, input_folder, output_folder, sensitivity='medium', max_workers=4, test_all_sensitivities=False):
+        """Initialize batch processor for multiple images."""
         self.input_folder = Path(input_folder)
         self.output_folder = Path(output_folder)
         self.detector = KirchnerDetector(sensitivity)
-        self.max_workers = max_workers
+        self.max_workers = max_workers  # Reduced from 12 to 4 for stability
         self.test_all_sensitivities = test_all_sensitivities
         self.supported_formats = {'.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp', '.webp'}
         self.output_folder.mkdir(parents=True, exist_ok=True)
 
     def scan_images(self):
+        """Scan input folder for supported image formats."""
         images = []
         for file_path in self.input_folder.rglob('*'):
             if file_path.is_file() and file_path.suffix.lower() in self.supported_formats:
@@ -318,7 +409,9 @@ class BatchProcessor:
         return images
 
     def process_single(self, img_path):
+        """Process single image with optional multi-sensitivity testing."""
         try:
+            print(f"  Processing: {img_path.name}")
             start_time = time.time()
             
             if self.test_all_sensitivities:
@@ -326,10 +419,11 @@ class BatchProcessor:
                 detailed_metrics = {}
                 
                 for sensitivity in ['low', 'medium', 'high']:
+                    print(f"    Testing {sensitivity} sensitivity...")
                     detector = KirchnerDetector(sensitivity=sensitivity)
                     result = detector.detect(str(img_path))
                     
-                    metrics = self._extract_detection_metrics(result['spectrum'], detector)
+                    metrics = detector.extract_detection_metrics(result['spectrum'])
                     results[sensitivity] = {
                         'detected': result['detected'],
                         'p_map': result['p_map'],
@@ -340,6 +434,7 @@ class BatchProcessor:
                     detailed_metrics[sensitivity] = metrics
                 
                 processing_time = time.time() - start_time
+                print(f"    Completed in {processing_time:.2f}s")
                 
                 return {
                     'file_name': img_path.name,
@@ -351,8 +446,10 @@ class BatchProcessor:
                     'detected_high': results['high']['detected']
                 }
             else:
+                print(f"    Running detection...")
                 result = self.detector.detect(str(img_path))
                 processing_time = time.time() - start_time
+                print(f"    Detection result: {result['detected']} in {processing_time:.2f}s")
 
                 return {
                     'file_name': img_path.name,
@@ -363,53 +460,17 @@ class BatchProcessor:
                     'prediction_error': result['prediction_error']
                 }
         except Exception as e:
+            print(f"ERROR processing {img_path}: {e}")
+            import traceback
+            traceback.print_exc()
             return {
                 'file_name': img_path.name,
                 'detected': None,
                 'error': str(e)
             }
 
-    def _extract_detection_metrics(self, spectrum, detector):
-        rows, cols = spectrum.shape
-        center_r, center_c = rows // 2, cols // 2
-
-        exclude_radius = min(rows, cols) // 10
-        y, x = np.ogrid[:rows, :cols]
-        distance = np.sqrt((x - center_c)**2 + (y - center_r)**2)
-        mask = distance >= exclude_radius
-        first_quad = spectrum[center_r:, center_c:]
-        quad_mask = mask[center_r:, center_c:]
-
-        if not np.any(quad_mask):
-            return None
-            
-        values = first_quad[quad_mask]
-        if len(values) == 0:
-            return None
-
-        sorted_vals = np.sort(values)
-        cumulative = np.cumsum(sorted_vals)
-        cumulative = cumulative / (cumulative[-1] + 1e-8)
-
-        max_gradient = np.max(np.diff(cumulative)) if len(cumulative) > 1 else 0
-        mean_val = np.mean(values)
-        max_peak = np.max(values)
-        threshold = mean_val + 3 * np.std(values)
-        peak_ratio = np.sum(values > threshold) / len(values)
-
-        return {
-            'max_gradient': max_gradient,
-            'gradient_threshold': detector.gradient_threshold,
-            'gradient_detected': max_gradient > detector.gradient_threshold,
-            'peak_ratio': peak_ratio,
-            'peak_ratio_threshold': detector.peak_ratio_threshold,
-            'peak_ratio_detected': peak_ratio > detector.peak_ratio_threshold,
-            'max_peak': max_peak,
-            'max_peak_threshold': detector.max_peak_threshold,
-            'max_peak_detected': max_peak > detector.max_peak_threshold
-        }
-
     def process_batch(self, save_visualizations=True):
+        """Process all images in batch with optional visualizations."""
         images = self.scan_images()
         print(f"Found {len(images)} images")
         
@@ -422,28 +483,67 @@ class BatchProcessor:
         results = []
         start_time = time.time()
 
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            futures = {executor.submit(self.process_single, img): img for img in images}
-
-            for i, future in enumerate(futures):
-                result = future.result()
-                results.append(result)
-
-                if self.test_all_sensitivities and 'multi_sensitivity_results' in result:
-                    low_status = 'DETECTED' if result['detected_low'] else 'NOT DETECTED'
-                    med_status = 'DETECTED' if result['detected_medium'] else 'NOT DETECTED'
-                    high_status = 'DETECTED' if result['detected_high'] else 'NOT DETECTED'
+        # For demo, process sequentially to avoid threading issues
+        if len(images) <= 20:  # Small batches run sequentially
+            print("Running in sequential mode for better debugging...")
+            for i, img_path in enumerate(images):
+                try:
+                    print(f"Processing {i+1}/{len(images)}: {img_path.name}")
+                    result = self.process_single(img_path)
+                    results.append(result)
                     
-                    progress = ((i + 1) / len(images)) * 100
-                    print(f"{progress:5.1f}% - {result['file_name']}:")
-                    print(f"    LOW: {low_status}, MEDIUM: {med_status}, HIGH: {high_status}")
-                else:
-                    status = 'DETECTED' if result.get('detected') else 'NOT DETECTED'
-                    if 'error' in result:
-                        status = 'ERROR'
+                    if self.test_all_sensitivities and 'multi_sensitivity_results' in result:
+                        low_status = 'DETECTED' if result['detected_low'] else 'NOT DETECTED'
+                        med_status = 'DETECTED' if result['detected_medium'] else 'NOT DETECTED'
+                        high_status = 'DETECTED' if result['detected_high'] else 'NOT DETECTED'
+                        
+                        print(f"    Results: LOW: {low_status}, MEDIUM: {med_status}, HIGH: {high_status}")
+                    else:
+                        status = 'DETECTED' if result.get('detected') else 'NOT DETECTED'
+                        if 'error' in result:
+                            status = 'ERROR'
+                        print(f"    Result: {status}")
+                        
+                except Exception as e:
+                    print(f"ERROR processing {img_path}: {e}")
+                    results.append({
+                        'file_name': img_path.name,
+                        'detected': None,
+                        'error': str(e)
+                    })
+        else:
+            # Use ThreadPool for larger batches
+            print(f"Running in parallel mode with {self.max_workers} workers...")
+            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                futures = {executor.submit(self.process_single, img): img for img in images}
 
-                    progress = ((i + 1) / len(images)) * 100
-                    print(f"{progress:5.1f}% - {result['file_name']}: {status}")
+                for i, future in enumerate(futures):
+                    try:
+                        result = future.result(timeout=60)  # 60 second timeout per image
+                        results.append(result)
+
+                        if self.test_all_sensitivities and 'multi_sensitivity_results' in result:
+                            low_status = 'DETECTED' if result['detected_low'] else 'NOT DETECTED'
+                            med_status = 'DETECTED' if result['detected_medium'] else 'NOT DETECTED'
+                            high_status = 'DETECTED' if result['detected_high'] else 'NOT DETECTED'
+                            
+                            progress = ((i + 1) / len(images)) * 100
+                            print(f"{progress:5.1f}% - {result['file_name']}:")
+                            print(f"    LOW: {low_status}, MEDIUM: {med_status}, HIGH: {high_status}")
+                        else:
+                            status = 'DETECTED' if result.get('detected') else 'NOT DETECTED'
+                            if 'error' in result:
+                                status = 'ERROR'
+
+                            progress = ((i + 1) / len(images)) * 100
+                            print(f"{progress:5.1f}% - {result['file_name']}: {status}")
+                    except Exception as e:
+                        print(f"TIMEOUT/ERROR processing image {i+1}: {e}")
+                        results.append({
+                            'file_name': f'unknown_{i}',
+                            'detected': None,
+                            'error': str(e)
+                        })
 
         df = self._create_results_dataframe(results)
         timestamp = time.strftime('%Y%m%d_%H%M%S')
@@ -499,6 +599,7 @@ class BatchProcessor:
         return df
 
     def _create_results_dataframe(self, results):
+        """Create pandas DataFrame from processing results."""
         if not results:
             return pd.DataFrame()
             
@@ -545,6 +646,7 @@ class BatchProcessor:
             return pd.DataFrame(results)
 
     def _create_multi_sensitivity_visualization(self, result, vis_folder):
+        """Create detailed multi-sensitivity visualization."""
         filename = result['file_name']
         multi_results = result['multi_sensitivity_results']
         detailed_metrics = result['detailed_metrics']
@@ -585,8 +687,8 @@ class BatchProcessor:
                       extent=[freq_x[0], freq_x[-1], freq_y[-1], freq_y[0]],
                       origin='lower')
         ax_spectrum.set_title('Enhanced Spectrum\n(Same for all sensitivities)')
-        ax_spectrum.set_xlabel('Normalized Frequency (f₁)')
-        ax_spectrum.set_ylabel('Normalized Frequency (f₂)')
+        ax_spectrum.set_xlabel('Normalized Frequency (f_1)')
+        ax_spectrum.set_ylabel('Normalized Frequency (f_2)')
         ax_spectrum.axhline(0, color='white', alpha=0.5, linewidth=0.5)
         ax_spectrum.axvline(0, color='white', alpha=0.5, linewidth=0.5)
         plt.colorbar(im2, ax=ax_spectrum, shrink=0.8)
@@ -654,6 +756,7 @@ class BatchProcessor:
 
 
 def quick_scan(input_folder, output_folder=None, sensitivity='medium', test_all_sensitivities=False):
+    """Quick scan interface for batch processing."""
     if output_folder is None:
         timestamp = time.strftime('%Y%m%d_%H%M%S')
         suffix = "_multi_sensitivity" if test_all_sensitivities else ""
@@ -664,6 +767,7 @@ def quick_scan(input_folder, output_folder=None, sensitivity='medium', test_all_
 
 
 def quick_scan_all_sensitivities(input_folder, output_folder=None):
+    """Quick scan with all sensitivity levels."""
     return quick_scan(input_folder, output_folder, test_all_sensitivities=True)
 
 
@@ -689,10 +793,422 @@ def detect_single_image(image_path, sensitivity='medium', save_plot=False):
 
     return result['detected']
 
+
+class ScalingTestSuite:
+    def __init__(self, scaling_factors=None, interpolation_methods=None):
+        """
+        Initialize scaling test suite.
+        
+        Args:
+            scaling_factors: List of scaling factors to test (default: comprehensive range)
+            interpolation_methods: Dict of OpenCV interpolation methods to test
+        """
+        if scaling_factors is None:
+            self.scaling_factors = [
+                0.5, 0.6, 0.7, 0.8, 0.9,          # Downscaling
+                1.1, 1.2, 1.3, 1.4, 1.5,          # Moderate upscaling
+                1.6, 1.7, 1.8, 1.9, 2.0,          # Strong upscaling
+                2.5, 3.0                            # Extreme upscaling
+            ]
+        else:
+            self.scaling_factors = scaling_factors
+            
+        if interpolation_methods is None:
+            self.interpolation_methods = {
+                'nearest': cv2.INTER_NEAREST,
+                'linear': cv2.INTER_LINEAR,
+                'cubic': cv2.INTER_CUBIC,
+                'lanczos': cv2.INTER_LANCZOS4
+            }
+        else:
+            self.interpolation_methods = interpolation_methods
+
+    def create_scaled_images(self, input_folder, output_folder):
+        """Create scaled versions of all images for testing."""
+        input_path = Path(input_folder)
+        output_path = Path(output_folder)
+        output_path.mkdir(parents=True, exist_ok=True)
+        
+        # Create subfolder structure
+        original_folder = output_path / 'original'
+        original_folder.mkdir(exist_ok=True)
+        
+        supported_formats = {'.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp', '.webp'}
+        images = [f for f in input_path.rglob('*') 
+                 if f.is_file() and f.suffix.lower() in supported_formats]
+        
+        print(f"Creating scaled versions of {len(images)} images...")
+        print(f"Scaling factors: {self.scaling_factors}")
+        print(f"Interpolation methods: {list(self.interpolation_methods.keys())}")
+        
+        created_images = []
+        
+        for img_idx, img_path in enumerate(images):
+            print(f"Processing image {img_idx + 1}/{len(images)}: {img_path.name}")
+            try:
+                # Load original image
+                img = cv2.imread(str(img_path), cv2.IMREAD_COLOR)
+                if img is None:
+                    print(f"  Could not load {img_path.name}, skipping...")
+                    continue
+                
+                # Check original size and limit if too large
+                h, w = img.shape[:2]
+                max_original_size = 2048
+                if max(h, w) > max_original_size:
+                    scale_down = max_original_size / max(h, w)
+                    new_h, new_w = int(h * scale_down), int(w * scale_down)
+                    img = cv2.resize(img, (new_w, new_w), interpolation=cv2.INTER_AREA)
+                    print(f"  Resized original from {h}x{w} to {new_h}x{new_w}")
+                    h, w = new_h, new_w
+                    
+                original_name = img_path.stem
+                original_ext = img_path.suffix
+                
+                # Copy original to test folder
+                original_copy = original_folder / f"{original_name}_original{original_ext}"
+                cv2.imwrite(str(original_copy), img)
+                created_images.append({
+                    'file_path': str(original_copy),
+                    'original_name': original_name,
+                    'scaling_factor': 1.0,
+                    'interpolation': 'original',
+                    'category': 'original'
+                })
+                
+                # Create scaled versions
+                for scale_factor in self.scaling_factors:
+                    print(f"  Creating scale {scale_factor:.1f} versions...")
+                    
+                    for interp_name, interp_method in self.interpolation_methods.items():
+                        
+                        # Create subfolder for this scaling factor and method
+                        scale_folder = output_path / f"scale_{scale_factor:.1f}_{interp_name}"
+                        scale_folder.mkdir(exist_ok=True)
+                        
+                        # Calculate new dimensions
+                        new_h, new_w = int(h * scale_factor), int(w * scale_factor)
+                        
+                        # Skip if resulting image would be too small or too large
+                        if new_h < 32 or new_w < 32:
+                            print(f"    Skipping {interp_name}: too small ({new_w}x{new_h})")
+                            continue
+                        if new_h > 4096 or new_w > 4096:
+                            print(f"    Skipping {interp_name}: too large ({new_w}x{new_h})")
+                            continue
+                            
+                        try:
+                            # Apply scaling
+                            print(f"    Scaling to {new_w}x{new_h} with {interp_name}...")
+                            scaled_img = cv2.resize(img, (new_w, new_h), interpolation=interp_method)
+                            
+                            # Save scaled image
+                            scaled_name = f"{original_name}_scale{scale_factor:.1f}_{interp_name}{original_ext}"
+                            scaled_path = scale_folder / scaled_name
+                            cv2.imwrite(str(scaled_path), scaled_img)
+                            
+                            created_images.append({
+                                'file_path': str(scaled_path),
+                                'original_name': original_name,
+                                'scaling_factor': scale_factor,
+                                'interpolation': interp_name,
+                                'category': 'downscaled' if scale_factor < 1.0 else 'upscaled'
+                            })
+                            print(f"    ✓ Created {scaled_name}")
+                            
+                        except Exception as scale_error:
+                            print(f"    ✗ Error scaling with {interp_name}: {scale_error}")
+                            continue
+                        
+            except Exception as e:
+                print(f"  Error processing {img_path}: {e}")
+                continue
+        
+        print(f"Created {len(created_images)} test images")
+        
+        # Save test configuration
+        config_df = pd.DataFrame(created_images)
+        config_path = output_path / 'test_configuration.csv'
+        config_df.to_csv(config_path, index=False)
+        print(f"Test configuration saved to: {config_path}")
+        
+        return created_images, str(output_path)
+
+    def run_scaling_test(self, input_folder, output_folder=None, sensitivity='medium'):
+        """Run comprehensive scaling test on all images."""
+        if output_folder is None:
+            timestamp = time.strftime('%Y%m%d_%H%M%S')
+            output_folder = f'scaling_test_{timestamp}'
+        
+        output_path = Path(output_folder)
+        output_path.mkdir(parents=True, exist_ok=True)
+        
+        # Step 1: Create scaled test images
+        print("=== STEP 1: Creating scaled test images ===")
+        scaled_images_folder = output_path / 'scaled_images'
+        created_images, scaled_folder = self.create_scaled_images(input_folder, scaled_images_folder)
+        
+        # Step 2: Run detection on all scaled images
+        print("\n=== STEP 2: Running Kirchner detection ===")
+        results_folder = output_path / 'detection_results'
+        processor = BatchProcessor(scaled_folder, results_folder, sensitivity=sensitivity)
+        detection_results = processor.process_batch(save_visualizations=True)
+        
+        # Step 3: Analyze results by scaling factor
+        print("\n=== STEP 3: Analyzing results by scaling factor ===")
+        analysis_results = self._analyze_scaling_results(created_images, detection_results, output_path)
+        
+        # Step 4: Create comprehensive report
+        print("\n=== STEP 4: Creating analysis report ===")
+        self._create_scaling_report(analysis_results, output_path)
+        
+        print(f"\nScaling test completed! Results in: {output_path}")
+        return analysis_results
+
+    def _analyze_scaling_results(self, created_images, detection_results, output_path):
+        """Analyze detection results by scaling factor and interpolation method."""
+        # Merge test configuration with detection results
+        config_df = pd.DataFrame(created_images)
+        
+        # Extract filename from file_path for matching
+        config_df['file_name'] = config_df['file_path'].apply(lambda x: os.path.basename(x))
+        
+        # Merge with detection results
+        if not detection_results.empty:
+            merged_df = config_df.merge(detection_results, on='file_name', how='left')
+        else:
+            merged_df = config_df.copy()
+            merged_df['detected'] = False
+        
+        # Fill missing detection results
+        merged_df['detected'] = merged_df['detected'].fillna(False)
+        
+        # Calculate detection rates by scaling factor
+        scaling_analysis = merged_df.groupby(['scaling_factor', 'interpolation']).agg({
+            'detected': ['count', 'sum', 'mean'],
+            'processing_time': 'mean'
+        }).round(4)
+        
+        scaling_analysis.columns = ['total_images', 'detected_count', 'detection_rate', 'avg_processing_time']
+        scaling_analysis = scaling_analysis.reset_index()
+        
+        # Calculate detection rates by interpolation method
+        interpolation_analysis = merged_df.groupby('interpolation').agg({
+            'detected': ['count', 'sum', 'mean'],
+            'processing_time': 'mean'
+        }).round(4)
+        
+        interpolation_analysis.columns = ['total_images', 'detected_count', 'detection_rate', 'avg_processing_time']
+        interpolation_analysis = interpolation_analysis.reset_index()
+        
+        # Save detailed results
+        detailed_results_path = output_path / 'detailed_scaling_results.csv'
+        merged_df.to_csv(detailed_results_path, index=False)
+        
+        scaling_results_path = output_path / 'scaling_factor_analysis.csv'
+        scaling_analysis.to_csv(scaling_results_path, index=False)
+        
+        interpolation_results_path = output_path / 'interpolation_method_analysis.csv'
+        interpolation_analysis.to_csv(interpolation_results_path, index=False)
+        
+        return {
+            'detailed_results': merged_df,
+            'scaling_analysis': scaling_analysis,
+            'interpolation_analysis': interpolation_analysis,
+            'total_images': len(merged_df),
+            'overall_detection_rate': merged_df['detected'].mean()
+        }
+
+    def _create_scaling_report(self, analysis_results, output_path):
+        """Create comprehensive visualization report."""
+        detailed_df = analysis_results['detailed_results']
+        scaling_df = analysis_results['scaling_analysis']
+        interpolation_df = analysis_results['interpolation_analysis']
+        
+        # Create comprehensive plot
+        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+        fig.suptitle('Kirchner Detector: Scaling Factor Analysis', fontsize=16, fontweight='bold')
+        
+        # Plot 1: Detection rate by scaling factor
+        ax1 = axes[0, 0]
+        for interp_method in scaling_df['interpolation'].unique():
+            method_data = scaling_df[scaling_df['interpolation'] == interp_method]
+            ax1.plot(method_data['scaling_factor'], method_data['detection_rate'], 
+                    'o-', label=interp_method, linewidth=2, markersize=6)
+        
+        ax1.set_xlabel('Scaling Factor')
+        ax1.set_ylabel('Detection Rate')
+        ax1.set_title('Detection Rate vs Scaling Factor')
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+        ax1.axvline(x=1.0, color='red', linestyle='--', alpha=0.5, label='Original')
+        
+        # Plot 2: Detection rate by interpolation method
+        ax2 = axes[0, 1]
+        bars = ax2.bar(interpolation_df['interpolation'], interpolation_df['detection_rate'])
+        ax2.set_ylabel('Overall Detection Rate')
+        ax2.set_title('Detection Rate by Interpolation Method')
+        ax2.set_ylim(0, 1)
+        
+        # Add value labels on bars
+        for bar in bars:
+            height = bar.get_height()
+            ax2.text(bar.get_x() + bar.get_width()/2., height + 0.01,
+                    f'{height:.3f}', ha='center', va='bottom')
+        
+        # Plot 3: Heatmap of detection rates
+        ax3 = axes[1, 0]
+        pivot_data = scaling_df.pivot(index='interpolation', columns='scaling_factor', values='detection_rate')
+        im = ax3.imshow(pivot_data.values, cmap='RdYlGn', aspect='auto', vmin=0, vmax=1)
+        
+        ax3.set_xticks(range(len(pivot_data.columns)))
+        ax3.set_xticklabels([f'{x:.1f}' for x in pivot_data.columns], rotation=45)
+        ax3.set_yticks(range(len(pivot_data.index)))
+        ax3.set_yticklabels(pivot_data.index)
+        ax3.set_xlabel('Scaling Factor')
+        ax3.set_ylabel('Interpolation Method')
+        ax3.set_title('Detection Rate Heatmap')
+        
+        # Add colorbar
+        cbar = plt.colorbar(im, ax=ax3, shrink=0.8)
+        cbar.set_label('Detection Rate')
+        
+        # Plot 4: Processing time analysis
+        ax4 = axes[1, 1]
+        scaling_df_clean = scaling_df.dropna(subset=['avg_processing_time'])
+        if not scaling_df_clean.empty:
+            for interp_method in scaling_df_clean['interpolation'].unique():
+                method_data = scaling_df_clean[scaling_df_clean['interpolation'] == interp_method]
+                ax4.plot(method_data['scaling_factor'], method_data['avg_processing_time'], 
+                        's-', label=interp_method, alpha=0.7)
+            
+            ax4.set_xlabel('Scaling Factor')
+            ax4.set_ylabel('Average Processing Time (s)')
+            ax4.set_title('Processing Time vs Scaling Factor')
+            ax4.legend()
+            ax4.grid(True, alpha=0.3)
+        else:
+            ax4.text(0.5, 0.5, 'No timing data available', ha='center', va='center', transform=ax4.transAxes)
+        
+        plt.tight_layout()
+        
+        # Save plot
+        plot_path = output_path / 'scaling_analysis_report.png'
+        plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+        plt.close()
+        
+        # Create summary text report
+        self._create_text_report(analysis_results, output_path)
+        
+        print(f"Analysis report saved to: {plot_path}")
+
+    def _create_text_report(self, analysis_results, output_path):
+        """Create detailed text summary report."""
+        detailed_df = analysis_results['detailed_results']
+        scaling_df = analysis_results['scaling_analysis']
+        
+        report_lines = []
+        report_lines.append("=" * 60)
+        report_lines.append("KIRCHNER DETECTOR: SCALING FACTOR ANALYSIS REPORT")
+        report_lines.append("=" * 60)
+        report_lines.append(f"Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+        report_lines.append(f"Total images tested: {analysis_results['total_images']}")
+        report_lines.append(f"Overall detection rate: {analysis_results['overall_detection_rate']:.3f}")
+        report_lines.append("")
+        
+        # Summary by scaling factor
+        report_lines.append("DETECTION RATES BY SCALING FACTOR:")
+        report_lines.append("-" * 40)
+        for scale in sorted(scaling_df['scaling_factor'].unique()):
+            scale_data = scaling_df[scaling_df['scaling_factor'] == scale]
+            avg_rate = scale_data['detection_rate'].mean()
+            report_lines.append(f"Scale {scale:4.1f}: {avg_rate:.3f} detection rate")
+        
+        report_lines.append("")
+        
+        # Summary by interpolation method
+        report_lines.append("DETECTION RATES BY INTERPOLATION METHOD:")
+        report_lines.append("-" * 45)
+        interpolation_df = analysis_results['interpolation_analysis']
+        for method in interpolation_df['interpolation']:
+            rate = interpolation_df[interpolation_df['interpolation'] == method]['detection_rate'].iloc[0]
+            report_lines.append(f"{method:8s}: {rate:.3f} detection rate")
+        
+        report_lines.append("")
+        
+        # Best and worst performing combinations
+        report_lines.append("BEST PERFORMING COMBINATIONS:")
+        report_lines.append("-" * 30)
+        best_combinations = scaling_df.nlargest(5, 'detection_rate')[['scaling_factor', 'interpolation', 'detection_rate']]
+        for _, row in best_combinations.iterrows():
+            report_lines.append(f"Scale {row['scaling_factor']:4.1f} + {row['interpolation']:8s}: {row['detection_rate']:.3f}")
+        
+        report_lines.append("")
+        report_lines.append("WORST PERFORMING COMBINATIONS:")
+        report_lines.append("-" * 31)
+        worst_combinations = scaling_df.nsmallest(5, 'detection_rate')[['scaling_factor', 'interpolation', 'detection_rate']]
+        for _, row in worst_combinations.iterrows():
+            report_lines.append(f"Scale {row['scaling_factor']:4.1f} + {row['interpolation']:8s}: {row['detection_rate']:.3f}")
+        
+        # Save text report
+        report_path = output_path / 'scaling_analysis_summary.txt'
+        with open(report_path, 'w') as f:
+            f.write('\n'.join(report_lines))
+        
+        print(f"Summary report saved to: {report_path}")
+
+
+def run_scaling_test(input_folder, scaling_factors=None, sensitivity='medium', output_folder=None):
+    """
+    Convenience function to run scaling test with custom parameters.
+    
+    Args:
+        input_folder: Folder containing original images
+        scaling_factors: List of scaling factors (default: comprehensive range)
+        sensitivity: Kirchner detector sensitivity ('low', 'medium', 'high')
+        output_folder: Output folder for results
+    """
+    test_suite = ScalingTestSuite(scaling_factors=scaling_factors)
+    return test_suite.run_scaling_test(input_folder, output_folder, sensitivity)
+
+
+def test_single_image_debug():
+    """Test single image for debugging purposes."""
+    import glob
+    
+    # Find first image in img folder
+    img_files = glob.glob('img/*.jpg') + glob.glob('img/*.png') + glob.glob('img/*.jpeg')
+    if not img_files:
+        print("No images found in img/ folder")
+        return
+    
+    test_img = img_files[0]
+    print(f"Testing single image: {test_img}")
+    
+    try:
+        detector = KirchnerDetector(sensitivity='high')
+        result = detector.detect(test_img)
+        print(f"SUCCESS: Detection result = {result['detected']}")
+        return result
+    except Exception as e:
+        print(f"ERROR testing single image: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
 def run_demo():
     """Run demonstration with sample images, including multi-sensitivity testing."""
     if os.path.exists('img'):
         print("Running demo...")
+        
+        # First test single image for debugging
+        print("\n=== Debug Test: Single Image ===")
+        single_result = test_single_image_debug()
+        if single_result is None:
+            print("Single image test failed, stopping demo")
+            return None
+        
         timestamp = time.strftime('%Y%m%d_%H%M%S')
         
         print("\n=== Single Sensitivity Demo (HIGH) ===")
@@ -705,6 +1221,8 @@ def run_demo():
                 print(f"Detected resampling in {detected}/{len(results_single)} images")
         except Exception as e:
             print(f"Single sensitivity demo failed: {e}")
+            import traceback
+            traceback.print_exc()
         
         print("\n=== Multi-Sensitivity Demo (ALL LEVELS) ===")
         output_folder_multi = f'results_multi_{timestamp}'
@@ -722,6 +1240,24 @@ def run_demo():
                 print(f"  HIGH sensitivity: {detected_high}/{total} images")
         except Exception as e:
             print(f"Multi-sensitivity demo failed: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        print("\n=== Scaling Test Demo ===")
+        scaling_output = f'scaling_test_{timestamp}'
+        try:
+            # Custom scaling factors for demo
+            demo_scaling_factors = [0.7, 0.8, 0.9, 1.2, 1.5, 2.0]
+            results_scaling = run_scaling_test('img', 
+                                             scaling_factors=demo_scaling_factors,
+                                             sensitivity='medium',
+                                             output_folder=scaling_output)
+            print(f"Scaling test demo completed! Results in: {scaling_output}")
+            print(f"Overall detection rate: {results_scaling['overall_detection_rate']:.3f}")
+        except Exception as e:
+            print(f"Scaling test demo failed: {e}")
+            import traceback
+            traceback.print_exc()
             
         return output_folder_multi
     else:
@@ -731,23 +1267,96 @@ def run_demo():
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
-        input_folder = sys.argv[2]
-        output_folder = sys.argv[3] if len(sys.argv) > 3 else None
-        test_all = "--all-sensitivities" in sys.argv
+        command = sys.argv[1]
         
-        if test_all:
-            print("Running batch processing with ALL sensitivity levels...")
-            results = quick_scan_all_sensitivities(input_folder, output_folder)
-        else:
-            sensitivity = 'medium'  
+        if command == "scaling-test":
+            # Scaling test mode
+            if len(sys.argv) < 3:
+                print("Usage: python kirchner.py scaling-test <input_folder> [output_folder]")
+                print("       python kirchner.py scaling-test <input_folder> --factors 0.8,1.2,1.5")
+                sys.exit(1)
+                
+            input_folder = sys.argv[2]
+            output_folder = sys.argv[3] if len(sys.argv) > 3 and not sys.argv[3].startswith('--') else None
+            
+            # Parse custom scaling factors
+            scaling_factors = None
+            if '--factors' in sys.argv:
+                idx = sys.argv.index('--factors')
+                if idx + 1 < len(sys.argv):
+                    factors_str = sys.argv[idx + 1]
+                    scaling_factors = [float(f.strip()) for f in factors_str.split(',')]
+                    
+            # Parse sensitivity
+            sensitivity = 'medium'
             if '--sensitivity' in sys.argv:
                 idx = sys.argv.index('--sensitivity')
                 if idx + 1 < len(sys.argv):
                     sensitivity = sys.argv[idx + 1]
             
-            print(f"Running batch processing with {sensitivity.upper()} sensitivity...")
-            results = quick_scan(input_folder, output_folder, sensitivity)
-        
-        print("Batch processing completed!")
+            print("Running SCALING TEST...")
+            print(f"Input folder: {input_folder}")
+            print(f"Scaling factors: {scaling_factors if scaling_factors else 'default range'}")
+            print(f"Sensitivity: {sensitivity}")
+            
+            results = run_scaling_test(input_folder, scaling_factors, sensitivity, output_folder)
+            print("Scaling test completed!")
+            
+        elif command == "batch":
+            # Regular batch processing mode
+            if len(sys.argv) < 3:
+                print("Usage: python kirchner.py batch <input_folder> [output_folder] [options]")
+                sys.exit(1)
+                
+            input_folder = sys.argv[2]
+            output_folder = sys.argv[3] if len(sys.argv) > 3 and not sys.argv[3].startswith('--') else None
+            test_all = "--all-sensitivities" in sys.argv
+            
+            if test_all:
+                print("Running batch processing with ALL sensitivity levels...")
+                results = quick_scan_all_sensitivities(input_folder, output_folder)
+            else:
+                sensitivity = 'medium'  
+                if '--sensitivity' in sys.argv:
+                    idx = sys.argv.index('--sensitivity')
+                    if idx + 1 < len(sys.argv):
+                        sensitivity = sys.argv[idx + 1]
+                
+                print(f"Running batch processing with {sensitivity.upper()} sensitivity...")
+                results = quick_scan(input_folder, output_folder, sensitivity)
+            
+            print("Batch processing completed!")
+            
+        elif command == "single":
+            # Single image mode
+            if len(sys.argv) < 3:
+                print("Usage: python kirchner.py single <image_path> [--sensitivity medium] [--save-plot]")
+                sys.exit(1)
+                
+            image_path = sys.argv[2]
+            sensitivity = 'medium'
+            save_plot = '--save-plot' in sys.argv
+            
+            if '--sensitivity' in sys.argv:
+                idx = sys.argv.index('--sensitivity')
+                if idx + 1 < len(sys.argv):
+                    sensitivity = sys.argv[idx + 1]
+            
+            print(f"Analyzing single image: {image_path}")
+            detected = detect_single_image(image_path, sensitivity, save_plot)
+            
+        else:
+            print("Unknown command. Available commands:")
+            print("  demo                          - Run demonstration")
+            print("  batch <folder>                - Batch process images")
+            print("  scaling-test <folder>         - Run scaling factor test")
+            print("  single <image>                - Analyze single image")
+            print("")
+            print("Examples:")
+            print("  python kirchner.py demo")
+            print("  python kirchner.py batch img/")
+            print("  python kirchner.py batch img/ --all-sensitivities")
+            print("  python kirchner.py scaling-test img/ --factors 0.8,1.2,1.5")
+            print("  python kirchner.py single image.jpg --save-plot")
     else:
         run_demo()

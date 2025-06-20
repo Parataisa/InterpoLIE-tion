@@ -4,3 +4,4 @@
 *.synctex.gz
 results*
 test_results*
+scaling_*
