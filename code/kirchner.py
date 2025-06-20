@@ -6,6 +6,7 @@ import time
 import matplotlib
 import pandas as pd
 import matplotlib.pyplot as plt
+import glob
 
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
@@ -67,27 +68,15 @@ class KirchnerDetector:
         self.sensitivity = sensitivity
 
     def detect(self, img_path):
-        """
-        Main detection pipeline implementing Kirchner's 6-step algorithm.
-        
-        Args:
-            img_path: Path to image file
-            
-        Returns:
-            dict: Detection results compatible with existing pipeline
-        """
         try:
-            # Load image first
             print(f"      Loading image: {Path(img_path).name}")
             image = self._load_image(img_path)
             print(f"      Image shape: {image.shape}")
             
-            # Run 6-step detection
             print(f"      Running 6-step detection...")
             results = self.detect_resampling(image)
             print(f"      Detection complete: {results['decision']}")
             
-            # Return in expected format for compatibility
             return {
                 'detected': results['decision'],
                 'p_map': results['p_map'],
@@ -99,15 +88,6 @@ class KirchnerDetector:
             raise
 
     def detect_resampling(self, image):
-        """
-        Main detection function following Kirchner's 6-step recipe
-        
-        Args:
-            image: Grayscale image (2D numpy array)
-            
-        Returns:
-            dict: Detection results with p_map, spectrum, peaks, decision
-        """
         try:
             # Step 1: Input preparation
             print(f"        Step 1: Input preparation")
@@ -152,7 +132,6 @@ class KirchnerDetector:
             raise
 
     def _load_image(self, img_path):
-        """Load and preprocess image with size constraints."""
         try:
             if isinstance(img_path, str):
                 img = np.array(Image.open(img_path))
@@ -183,7 +162,7 @@ class KirchnerDetector:
         p_map = self.lambda_param * np.exp(-(abs_error ** self.tau) / self.sigma)
         
         # Normalize for consistency with other parts of pipeline
-        return (p_map - p_map.min()) / (p_map.max() - p_map.min() + 1e-8)
+        return p_map
 
     def _compute_spectrum(self, p_map):
         """Step 5: Compute frequency spectrum using DFT"""
@@ -209,15 +188,14 @@ class KirchnerDetector:
         center = np.array(spectrum.shape) // 2
         h, w = spectrum.shape
         
-        # Optimize: Only search in reduced area and skip pixels for large images
-        step_size = max(1, min(h, w) // 200)  # Adaptive step size
+        step_size = max(1, min(h, w) // 200)  
         search_range_h = min(h-10, center[0] + h//4)
         search_range_w = min(w-10, center[1] + w//4)
         
         print(f"        Search area: {search_range_h}x{search_range_w}, step_size: {step_size}")
         
         peak_count = 0
-        max_peaks = 50  # Limit number of peaks to prevent infinite processing
+        max_peaks = 50  
         
         # Search for peaks (excluding DC component) with adaptive step size
         for i in range(5, search_range_h, step_size):
@@ -273,7 +251,6 @@ class KirchnerDetector:
         return max_strength > decision_threshold
 
     def extract_detection_metrics(self, spectrum):
-        """Extract detailed metrics for analysis."""
         # Try new peak detection method first
         peaks = self._detect_peaks(spectrum)
         
@@ -325,7 +302,6 @@ class KirchnerDetector:
 
 
 def save_visualization(filename, p_map, spectrum, prediction_error, detected, output_folder):
-    """Save comprehensive visualization of detection results."""
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
     fig.suptitle(f'{filename} - {"DETECTED" if detected else "NOT DETECTED"}',
                  fontsize=14, fontweight='bold',
@@ -391,7 +367,6 @@ def save_visualization(filename, p_map, spectrum, prediction_error, detected, ou
 
 class BatchProcessor:
     def __init__(self, input_folder, output_folder, sensitivity='medium', max_workers=4, test_all_sensitivities=False):
-        """Initialize batch processor for multiple images."""
         self.input_folder = Path(input_folder)
         self.output_folder = Path(output_folder)
         self.detector = KirchnerDetector(sensitivity)
@@ -401,7 +376,6 @@ class BatchProcessor:
         self.output_folder.mkdir(parents=True, exist_ok=True)
 
     def scan_images(self):
-        """Scan input folder for supported image formats."""
         images = []
         for file_path in self.input_folder.rglob('*'):
             if file_path.is_file() and file_path.suffix.lower() in self.supported_formats:
@@ -409,7 +383,6 @@ class BatchProcessor:
         return images
 
     def process_single(self, img_path):
-        """Process single image with optional multi-sensitivity testing."""
         try:
             print(f"  Processing: {img_path.name}")
             start_time = time.time()
@@ -470,7 +443,6 @@ class BatchProcessor:
             }
 
     def process_batch(self, save_visualizations=True):
-        """Process all images in batch with optional visualizations."""
         images = self.scan_images()
         print(f"Found {len(images)} images")
         
@@ -483,8 +455,7 @@ class BatchProcessor:
         results = []
         start_time = time.time()
 
-        # For demo, process sequentially to avoid threading issues
-        if len(images) <= 20:  # Small batches run sequentially
+        if len(images) <= 20:
             print("Running in sequential mode for better debugging...")
             for i, img_path in enumerate(images):
                 try:
@@ -512,14 +483,13 @@ class BatchProcessor:
                         'error': str(e)
                     })
         else:
-            # Use ThreadPool for larger batches
             print(f"Running in parallel mode with {self.max_workers} workers...")
             with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
                 futures = {executor.submit(self.process_single, img): img for img in images}
 
                 for i, future in enumerate(futures):
                     try:
-                        result = future.result(timeout=60)  # 60 second timeout per image
+                        result = future.result(timeout=60)  
                         results.append(result)
 
                         if self.test_all_sensitivities and 'multi_sensitivity_results' in result:
@@ -599,7 +569,6 @@ class BatchProcessor:
         return df
 
     def _create_results_dataframe(self, results):
-        """Create pandas DataFrame from processing results."""
         if not results:
             return pd.DataFrame()
             
@@ -646,7 +615,6 @@ class BatchProcessor:
             return pd.DataFrame(results)
 
     def _create_multi_sensitivity_visualization(self, result, vis_folder):
-        """Create detailed multi-sensitivity visualization."""
         filename = result['file_name']
         multi_results = result['multi_sensitivity_results']
         detailed_metrics = result['detailed_metrics']
@@ -756,7 +724,6 @@ class BatchProcessor:
 
 
 def quick_scan(input_folder, output_folder=None, sensitivity='medium', test_all_sensitivities=False):
-    """Quick scan interface for batch processing."""
     if output_folder is None:
         timestamp = time.strftime('%Y%m%d_%H%M%S')
         suffix = "_multi_sensitivity" if test_all_sensitivities else ""
@@ -767,12 +734,10 @@ def quick_scan(input_folder, output_folder=None, sensitivity='medium', test_all_
 
 
 def quick_scan_all_sensitivities(input_folder, output_folder=None):
-    """Quick scan with all sensitivity levels."""
     return quick_scan(input_folder, output_folder, test_all_sensitivities=True)
 
 
 def detect_single_image(image_path, sensitivity='medium', save_plot=False):
-    """Single image detection with optional visualization."""
     detector = KirchnerDetector(sensitivity)
     result = detector.detect(image_path)
 
@@ -796,18 +761,11 @@ def detect_single_image(image_path, sensitivity='medium', save_plot=False):
 
 class ScalingTestSuite:
     def __init__(self, scaling_factors=None, interpolation_methods=None):
-        """
-        Initialize scaling test suite.
-        
-        Args:
-            scaling_factors: List of scaling factors to test (default: comprehensive range)
-            interpolation_methods: Dict of OpenCV interpolation methods to test
-        """
         if scaling_factors is None:
             self.scaling_factors = [
-                0.5, 0.6, 0.7, 0.8, 0.9,          # Downscaling
-                1.1, 1.2, 1.3, 1.4, 1.5,          # Moderate upscaling
-                1.6, 1.7, 1.8, 1.9, 2.0,          # Strong upscaling
+                0.5, 0.6, 0.7, 0.8, 0.9,            # Downscaling
+                1.1, 1.2, 1.3, 1.4, 1.5,            # Moderate upscaling
+                1.6, 1.7, 1.8, 1.9, 2.0,            # Strong upscaling
                 2.5, 3.0                            # Extreme upscaling
             ]
         else:
@@ -829,7 +787,6 @@ class ScalingTestSuite:
         output_path = Path(output_folder)
         output_path.mkdir(parents=True, exist_ok=True)
         
-        # Create subfolder structure
         original_folder = output_path / 'original'
         original_folder.mkdir(exist_ok=True)
         
@@ -876,20 +833,15 @@ class ScalingTestSuite:
                     'category': 'original'
                 })
                 
-                # Create scaled versions
                 for scale_factor in self.scaling_factors:
                     print(f"  Creating scale {scale_factor:.1f} versions...")
-                    
                     for interp_name, interp_method in self.interpolation_methods.items():
                         
-                        # Create subfolder for this scaling factor and method
                         scale_folder = output_path / f"scale_{scale_factor:.1f}_{interp_name}"
                         scale_folder.mkdir(exist_ok=True)
                         
-                        # Calculate new dimensions
                         new_h, new_w = int(h * scale_factor), int(w * scale_factor)
                         
-                        # Skip if resulting image would be too small or too large
                         if new_h < 32 or new_w < 32:
                             print(f"    Skipping {interp_name}: too small ({new_w}x{new_h})")
                             continue
@@ -898,11 +850,9 @@ class ScalingTestSuite:
                             continue
                             
                         try:
-                            # Apply scaling
                             print(f"    Scaling to {new_w}x{new_h} with {interp_name}...")
                             scaled_img = cv2.resize(img, (new_w, new_h), interpolation=interp_method)
                             
-                            # Save scaled image
                             scaled_name = f"{original_name}_scale{scale_factor:.1f}_{interp_name}{original_ext}"
                             scaled_path = scale_folder / scaled_name
                             cv2.imwrite(str(scaled_path), scaled_img)
@@ -926,7 +876,6 @@ class ScalingTestSuite:
         
         print(f"Created {len(created_images)} test images")
         
-        # Save test configuration
         config_df = pd.DataFrame(created_images)
         config_path = output_path / 'test_configuration.csv'
         config_df.to_csv(config_path, index=False)
@@ -935,7 +884,6 @@ class ScalingTestSuite:
         return created_images, str(output_path)
 
     def run_scaling_test(self, input_folder, output_folder=None, sensitivity='medium'):
-        """Run comprehensive scaling test on all images."""
         if output_folder is None:
             timestamp = time.strftime('%Y%m%d_%H%M%S')
             output_folder = f'scaling_test_{timestamp}'
@@ -966,8 +914,6 @@ class ScalingTestSuite:
         return analysis_results
 
     def _analyze_scaling_results(self, created_images, detection_results, output_path):
-        """Analyze detection results by scaling factor and interpolation method."""
-        # Merge test configuration with detection results
         config_df = pd.DataFrame(created_images)
         
         # Extract filename from file_path for matching
@@ -1020,12 +966,10 @@ class ScalingTestSuite:
         }
 
     def _create_scaling_report(self, analysis_results, output_path):
-        """Create comprehensive visualization report."""
         detailed_df = analysis_results['detailed_results']
         scaling_df = analysis_results['scaling_analysis']
         interpolation_df = analysis_results['interpolation_analysis']
         
-        # Create comprehensive plot
         fig, axes = plt.subplots(2, 2, figsize=(16, 12))
         fig.suptitle('Kirchner Detector: Scaling Factor Analysis', fontsize=16, fontweight='bold')
         
@@ -1069,7 +1013,6 @@ class ScalingTestSuite:
         ax3.set_ylabel('Interpolation Method')
         ax3.set_title('Detection Rate Heatmap')
         
-        # Add colorbar
         cbar = plt.colorbar(im, ax=ax3, shrink=0.8)
         cbar.set_label('Detection Rate')
         
@@ -1092,18 +1035,15 @@ class ScalingTestSuite:
         
         plt.tight_layout()
         
-        # Save plot
         plot_path = output_path / 'scaling_analysis_report.png'
-        plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+        plt.savefig(plot_path, bbox_inches='tight')
         plt.close()
         
-        # Create summary text report
         self._create_text_report(analysis_results, output_path)
         
         print(f"Analysis report saved to: {plot_path}")
 
     def _create_text_report(self, analysis_results, output_path):
-        """Create detailed text summary report."""
         detailed_df = analysis_results['detailed_results']
         scaling_df = analysis_results['scaling_analysis']
         
@@ -1150,7 +1090,6 @@ class ScalingTestSuite:
         for _, row in worst_combinations.iterrows():
             report_lines.append(f"Scale {row['scaling_factor']:4.1f} + {row['interpolation']:8s}: {row['detection_rate']:.3f}")
         
-        # Save text report
         report_path = output_path / 'scaling_analysis_summary.txt'
         with open(report_path, 'w') as f:
             f.write('\n'.join(report_lines))
@@ -1159,24 +1098,11 @@ class ScalingTestSuite:
 
 
 def run_scaling_test(input_folder, scaling_factors=None, sensitivity='medium', output_folder=None):
-    """
-    Convenience function to run scaling test with custom parameters.
-    
-    Args:
-        input_folder: Folder containing original images
-        scaling_factors: List of scaling factors (default: comprehensive range)
-        sensitivity: Kirchner detector sensitivity ('low', 'medium', 'high')
-        output_folder: Output folder for results
-    """
     test_suite = ScalingTestSuite(scaling_factors=scaling_factors)
     return test_suite.run_scaling_test(input_folder, output_folder, sensitivity)
 
 
 def test_single_image_debug():
-    """Test single image for debugging purposes."""
-    import glob
-    
-    # Find first image in img folder
     img_files = glob.glob('img/*.jpg') + glob.glob('img/*.png') + glob.glob('img/*.jpeg')
     if not img_files:
         print("No images found in img/ folder")
@@ -1198,11 +1124,9 @@ def test_single_image_debug():
 
 
 def run_demo():
-    """Run demonstration with sample images, including multi-sensitivity testing."""
     if os.path.exists('img'):
         print("Running demo...")
         
-        # First test single image for debugging
         print("\n=== Debug Test: Single Image ===")
         single_result = test_single_image_debug()
         if single_result is None:
@@ -1246,7 +1170,6 @@ def run_demo():
         print("\n=== Scaling Test Demo ===")
         scaling_output = f'scaling_test_{timestamp}'
         try:
-            # Custom scaling factors for demo
             demo_scaling_factors = [0.7, 0.8, 0.9, 1.2, 1.5, 2.0]
             results_scaling = run_scaling_test('img', 
                                              scaling_factors=demo_scaling_factors,
@@ -1270,7 +1193,6 @@ if __name__ == "__main__":
         command = sys.argv[1]
         
         if command == "scaling-test":
-            # Scaling test mode
             if len(sys.argv) < 3:
                 print("Usage: python kirchner.py scaling-test <input_folder> [output_folder]")
                 print("       python kirchner.py scaling-test <input_folder> --factors 0.8,1.2,1.5")
@@ -1279,7 +1201,6 @@ if __name__ == "__main__":
             input_folder = sys.argv[2]
             output_folder = sys.argv[3] if len(sys.argv) > 3 and not sys.argv[3].startswith('--') else None
             
-            # Parse custom scaling factors
             scaling_factors = None
             if '--factors' in sys.argv:
                 idx = sys.argv.index('--factors')
@@ -1303,7 +1224,6 @@ if __name__ == "__main__":
             print("Scaling test completed!")
             
         elif command == "batch":
-            # Regular batch processing mode
             if len(sys.argv) < 3:
                 print("Usage: python kirchner.py batch <input_folder> [output_folder] [options]")
                 sys.exit(1)
