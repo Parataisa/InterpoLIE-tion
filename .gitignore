@@ -2,6 +2,5 @@
 *.snm
 *.bbl
 *.synctex.gz
-results*
-test_results*
-scaling_*
+__pycache__
+demo*
