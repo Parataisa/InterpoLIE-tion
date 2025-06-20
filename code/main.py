@@ -190,7 +190,6 @@ def print_usage():
     print("Options:")
     print("  --sensitivity <level>         - Set sensitivity: low, medium, high")
     print("  --all-sensitivities          - Test all sensitivity levels")
-    print("  --factors <list>             - Scaling factors (comma-separated)")
     print("  --save-plot                  - Save visualization plot")
     print("")
     print("Examples:")

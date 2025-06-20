@@ -17,25 +17,22 @@ from matplotlib.colors import LogNorm
 
 class ScalingTestSuite:
     def __init__(self, scaling_factors=None, interpolation_methods=None):
-        if scaling_factors is None:
-            self.scaling_factors = [
-                0.5, 0.6, 0.7, 0.8, 0.9,            # Downscaling
-                1.1, 1.2, 1.3, 1.4, 1.5,            # Moderate upscaling
-                1.6, 1.7, 1.8, 1.9, 2.0,            # Strong upscaling
-                2.5, 3.0                            # Extreme upscaling
-            ]
-        else:
-            self.scaling_factors = scaling_factors
+        # self.scaling_factors = [
+        #     0.5, 0.6, 0.7, 0.8, 0.9,            # Downscaling
+        #     1.1, 1.2, 1.3, 1.4, 1.5,            # Moderate upscaling
+        #     1.6, 1.7, 1.8, 1.9, 2.0,            # Strong upscaling
+        #     2.5, 3.0                            # Extreme upscaling
+        # ]
+        self.scaling_factors = [
+            0.5, 0.8, 1.2, 1.5,
+        ]
             
-        if interpolation_methods is None:
-            self.interpolation_methods = {
-                'nearest': cv2.INTER_NEAREST,
-                'linear': cv2.INTER_LINEAR,
-                'cubic': cv2.INTER_CUBIC,
-                'lanczos': cv2.INTER_LANCZOS4
-            }
-        else:
-            self.interpolation_methods = interpolation_methods
+        self.interpolation_methods = {
+            'nearest': cv2.INTER_NEAREST,
+            'linear': cv2.INTER_LINEAR,
+            'cubic': cv2.INTER_CUBIC,
+            'lanczos': cv2.INTER_LANCZOS4
+        }
 
     def create_scaled_images(self, input_folder, output_folder):
         input_path = Path(input_folder)
@@ -458,18 +455,18 @@ class ScalingTestSuite:
 
 def save_scaling_visualization(filename, p_map, spectrum, prediction_error, detected, 
                          scaling_factor, interpolation_method, detailed_metrics, output_folder):
-    fig = plt.figure(figsize=(14, 10))
-    gs = fig.add_gridspec(3, 2, height_ratios=[1, 1, 0.5], hspace=0.3, wspace=0.25)
+    fig = plt.figure(figsize=(16, 12)) 
+    gs = fig.add_gridspec(3, 2, height_ratios=[1, 1, 0.7], hspace=0.4, wspace=0.3)
     
     title_color = 'red' if detected else 'green'
     status = "DETECTED" if detected else "NOT DETECTED"
     fig.suptitle(f'{filename} - {status}\nScale: {scaling_factor:.1f}x, Method: {interpolation_method}',
-                fontsize=14, fontweight='bold', color=title_color)
+                fontsize=16, fontweight='bold', color=title_color, y=0.95) 
 
     # 1. P-map (top-left)
     ax1 = fig.add_subplot(gs[0, 0])
     im1 = ax1.imshow(p_map, cmap='hot', vmin=0, vmax=1)
-    ax1.set_title('Probability Map (P-Map)')
+    ax1.set_title('Probability Map (P-Map)', fontsize=12)
     ax1.set_xlabel('Pixel Column')
     ax1.set_ylabel('Pixel Row')
     plt.colorbar(im1, ax=ax1, shrink=0.8)
@@ -479,7 +476,7 @@ def save_scaling_visualization(filename, p_map, spectrum, prediction_error, dete
     error_range = np.percentile(prediction_error, [5, 95])
     im2 = ax2.imshow(prediction_error, cmap='RdBu_r',
                     vmin=error_range[0], vmax=error_range[1])
-    ax2.set_title('Prediction Error')
+    ax2.set_title('Prediction Error', fontsize=12)
     ax2.set_xlabel('Pixel Column')
     ax2.set_ylabel('Pixel Row')
     plt.colorbar(im2, ax=ax2, shrink=0.8)
@@ -495,7 +492,7 @@ def save_scaling_visualization(filename, p_map, spectrum, prediction_error, dete
                     norm=LogNorm(vmin=spectrum_min, vmax=spectrum.max()),
                     extent=[freq_x[0], freq_x[-1], freq_y[-1], freq_y[0]],
                     origin='lower')
-    ax3.set_title('Frequency Spectrum (Log Scale)')
+    ax3.set_title('Frequency Spectrum (Log Scale)', fontsize=12)
     ax3.set_xlabel('Normalized Frequency f_x')
     ax3.set_ylabel('Normalized Frequency f_y')
     ax3.axhline(0, color='white', alpha=0.5, linewidth=0.5)
@@ -509,89 +506,95 @@ def save_scaling_visualization(filename, p_map, spectrum, prediction_error, dete
     ax4.hist(error_flat, bins=n_bins, alpha=0.7, edgecolor='black', density=True)
     ax4.axvline(np.mean(error_flat), color='red', linestyle='--', linewidth=2, label='Mean')
     ax4.axvline(np.median(error_flat), color='orange', linestyle='--', linewidth=2, label='Median')
-    ax4.set_title('Prediction Error Distribution')
+    ax4.set_title('Prediction Error Distribution', fontsize=12)
     ax4.set_xlabel('Error Value')
     ax4.set_ylabel('Density')
     ax4.legend()
     ax4.grid(True, alpha=0.3)
     
-    stats_text = f'μ={np.mean(error_flat):.4f}\nσ={np.std(error_flat):.4f}'
+    stats_text = f'mean={np.mean(error_flat):.4f}\nstd={np.std(error_flat):.4f}'
     ax4.text(0.02, 0.98, stats_text, transform=ax4.transAxes, 
             verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
 
-    # 5. Detailed Metrics Table (bottom, full width)
+    # 5. Enhanced Detailed Metrics Table (bottom, full width)
     ax_table = fig.add_subplot(gs[2, :])
     ax_table.axis('off')
     
-    if detailed_metrics:
-        headers = ['Criterion', 'Value', 'Threshold', 'Status', 'Peak Count', 'Kirchner Peaks']
-        
-        # Add debug info for peak count
-        peak_count_str = f"{detailed_metrics.get('peak_count', 0)}"
-        if detailed_metrics.get('peak_count', 0) == 0:
-            peak_count_str += " (⚠️ Debug needed)"
-            
-        table_data = [
-            ['Max Gradient', f"{detailed_metrics.get('max_gradient', 0):.5f}", 
-            f"{detailed_metrics.get('gradient_threshold', 0):.5f}",
-            "✓ PASS" if detailed_metrics.get('gradient_detected', False) else "✗ FAIL",
-            peak_count_str, 
-            "✓" if detailed_metrics.get('kirchner_peaks', False) else "✗"],
-            
-            ['Peak Ratio', f"{detailed_metrics.get('peak_ratio', 0):.5f}", 
-            f"{detailed_metrics.get('peak_ratio_threshold', 0):.5f}",
-            "✓ PASS" if detailed_metrics.get('peak_ratio_detected', False) else "✗ FAIL",
-            "", ""],
-            
-            ['Max Peak', f"{detailed_metrics.get('max_peak', 0):.5f}", 
-            f"{detailed_metrics.get('max_peak_threshold', 0):.5f}",
-            "✓ PASS" if detailed_metrics.get('max_peak_detected', False) else "✗ FAIL",
-            "", ""]
-        ]
-        
-        table = ax_table.table(cellText=table_data, colLabels=headers,
-                            cellLoc='center', loc='center',
-                            bbox=[0, 0.0, 1, 1.0])
-        
-        table.auto_set_font_size(False)
-        table.set_fontsize(9)
-        table.scale(1.0, 2.5)
-        
-        # Style the table
-        cellDict = table.get_celld()
-        for i in range(len(headers)):
-            for j in range(len(table_data) + 1):  
-                cellDict[(j, i)].set_width(0.16)  
-                cellDict[(j, i)].set_height(0.2)
-        
-        # Color code the results
-        for i, row in enumerate(table_data):
-            if "✓ PASS" in row[3]:
-                table[(i+1, 3)].set_facecolor('#ddffdd')  # Light green
-            else:
-                table[(i+1, 3)].set_facecolor('#ffdddd')  # Light red
-                
-            if row[5] == "✓":
-                table[(i+1, 5)].set_facecolor('#ddffdd')
-            elif row[5] == "✗":
-                table[(i+1, 5)].set_facecolor('#ffdddd')
-                
-            if "⚠️" in str(row[4]):
-                table[(i+1, 4)].set_facecolor('#fff3cd')  # Warning yellow
-        
-        for j in range(len(headers)):
-            table[(0, j)].set_facecolor('#e6e6e6')
-            table[(0, j)].set_text_props(weight='bold')
-            
-        ax_table.set_title('Detection Criteria Analysis', fontsize=12, fontweight='bold', y=0.9)
-    else:
-        ax_table.text(0.5, 0.5, 'No detailed metrics available', 
-                    ha='center', va='center', transform=ax_table.transAxes,
-                    fontsize=12, style='italic')
-
-    plt.subplots_adjust(left=0.08, bottom=0.05, right=0.95, top=0.88, wspace=0.25, hspace=0.3)
+    headers = ['Detection Criterion', 'Measured Value', 'Threshold', 'Result', 'Peak Analysis']
     
-    # Save the visualization
+    peak_count = detailed_metrics.get('peak_count', 0)
+    peak_info = f"{peak_count} peaks found"
+    if peak_count == 0:
+        peak_info += "\n(May need threshold tuning)"
+        
+    table_data = [
+        ['Maximum Gradient', 
+         f"{detailed_metrics.get('max_gradient', 0):.5f}", 
+         f">{detailed_metrics.get('gradient_threshold', 0):.5f}",
+         "✓ PASS" if detailed_metrics.get('gradient_detected', False) else "✗ FAIL",
+         peak_info],
+        
+        ['Peak Ratio', 
+         f"{detailed_metrics.get('peak_ratio', 0):.3f}", 
+         f"≥{detailed_metrics.get('peak_ratio_threshold', 0):.3f}",
+         "✓ PASS" if detailed_metrics.get('peak_ratio_detected', False) else "✗ FAIL",
+         "✓ Found" if detailed_metrics.get('kirchner_peaks', False) else "✗ None"],
+        
+        ['Maximum Peak Strength', 
+         f"{detailed_metrics.get('max_peak', 0):.5f}", 
+         f">{detailed_metrics.get('max_peak_threshold', 0):.5f}",
+         "✓ PASS" if detailed_metrics.get('max_peak_detected', False) else "✗ FAIL",
+         f"Spectrum max: {detailed_metrics.get('spectrum_max', 0):.3f}"]
+    ]
+    
+    table = ax_table.table(cellText=table_data, colLabels=headers,
+                        cellLoc='center', loc='center',
+                        bbox=[0.05, 0.1, 0.9, 0.8])
+    
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)  # Increased font size
+    table.scale(1.0, 2.0)   # Better vertical scaling
+    
+    cellDict = table.get_celld()
+    n_rows, n_cols = len(table_data) + 1, len(headers)
+    
+    for i in range(n_rows):
+        for j in range(n_cols):
+            cell = cellDict.get((i, j))
+            if cell:
+                cell.set_height(0.15)  # Consistent row height
+                cell.set_linewidth(1)
+                cell.set_edgecolor('gray')
+                
+                # Header styling
+                if i == 0:
+                    cell.set_facecolor('#e8e8e8')
+                    cell.set_text_props(weight='bold', size=10)
+                else:
+                    if j == 3:  # Result column
+                        text = table_data[i-1][j]
+                        if "✓ PASS" in text:
+                            cell.set_facecolor('#d4edda')  # Light green
+                        elif "✗ FAIL" in text:
+                            cell.set_facecolor('#f8d7da')  # Light red
+                    elif j == 4 and "tuning" in str(table_data[i-1][j]):  # Peak analysis with warning
+                        cell.set_facecolor('#fff3cd')  # Warning yellow
+                    
+                    cell.set_text_props(size=9)
+    
+    ax_table.text(0.5, 0.98, 'Detection Criteria Analysis', 
+                 ha='center', va='top', transform=ax_table.transAxes,
+                 fontsize=14, fontweight='bold')
+    
+    overall_status = "RESAMPLING DETECTED" if detected else "NO RESAMPLING DETECTED"
+    status_color = 'red' if detected else 'green'
+    ax_table.text(0.5, 0.02, f'Overall Result: {overall_status}', 
+                 ha='center', va='bottom', transform=ax_table.transAxes,
+                 fontsize=12, fontweight='bold', color=status_color,
+                 bbox=dict(boxstyle='round,pad=0.3', facecolor='white', edgecolor=status_color))
+
+    plt.subplots_adjust(left=0.08, bottom=0.08, right=0.95, top=0.88, wspace=0.25, hspace=0.35)
+    
     base_name = filename.split(".")[0]
     output_path = output_folder / f'{base_name}_scale{scaling_factor:.1f}_{interpolation_method}_analysis.png'
     fig.savefig(output_path, dpi=120, bbox_inches='tight', facecolor='white')

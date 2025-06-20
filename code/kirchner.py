@@ -89,10 +89,10 @@ class KirchnerDetector:
         print(f"        Step 5: Computing frequency spectrum")
         spectrum = self.compute_spectrum(p_map)
         
-        # Step 6: Peak detection and decision
+        # Step 6: Peak detection and decision using both paper methods
         print(f"        Step 6: Peak detection and decision")
         peaks = self.detect_characteristic_peaks(spectrum)
-        detected = self.make_decision(peaks)
+        detected = self.make_decision(peaks, spectrum)
         
         return {
             'p_map': p_map,
@@ -157,67 +157,175 @@ class KirchnerDetector:
 
     def detect_characteristic_peaks(self, spectrum):
         """
-        Step 6a: Detect characteristic peaks in frequency spectrum.
+        Step 6a: Detect characteristic peaks using Kirchner paper method.
+        
+        Paper method: "peaks n times greater than a local average magnitude"
+        "T is selected to be 10" (Section 3.4)
         """
-        print(f"          Detecting characteristic peaks...")
+        print(f"          Detecting characteristic peaks (Kirchner paper method)...")
         
         h, w = spectrum.shape
         center_h, center_w = h // 2, w // 2
         
-        peaks = []
-        search_radius = min(h, w) // 4
+        # Paper parameters
+        T = 10  # Threshold factor from paper: "T is selected to be 10"
+        search_radius = min(h, w) // 4  # Search radius
         
-        # Search for peaks excluding DC component (center)
+        print(f"          Using paper method: T={T}, search_radius={search_radius}")
+        print(f"          Spectrum range: [{np.min(spectrum):.6f}, {np.max(spectrum):.6f}]")
+        
+        peaks = []
+        candidate_count = 0
+        
+        # Search for peaks excluding DC component
         for i in range(max(5, center_h - search_radius), 
                       min(h - 5, center_h + search_radius), 3):
             for j in range(max(5, center_w - search_radius), 
                           min(w - 5, center_w + search_radius), 3):
                 
-                # Skip DC component
+                # Skip DC component (center)
                 if abs(i - center_h) < 5 and abs(j - center_w) < 5:
                     continue
                 
                 current_value = spectrum[i, j]
+                candidate_count += 1
                 
+                # Get local region for average calculation (Kirchner method)
                 local_region = spectrum[max(0, i-2):min(h, i+3), 
                                      max(0, j-2):min(w, j+3)]
                 
-                if (current_value == np.max(local_region) and 
-                    current_value > self.peak_threshold):
-                    
+                # Calculate local average excluding center point (paper method)
+                local_flat = local_region.flatten()
+                if len(local_flat) > 1:
+                    center_idx = len(local_flat) // 2
+                    # Exclude center point from average
+                    local_values = np.concatenate([local_flat[:center_idx], local_flat[center_idx+1:]])
+                    local_average = np.mean(local_values) if len(local_values) > 0 else 0
+                else:
+                    local_average = 0
+                
+                # Kirchner paper conditions
+                is_local_max = (current_value == np.max(local_region))
+                is_significant = (local_average > 0 and current_value > T * local_average)
+                
+                if is_local_max and is_significant:
                     freq_x = (j - center_w) / w
                     freq_y = (i - center_h) / h
+                    ratio = current_value / local_average if local_average > 0 else float('inf')
                     
                     peaks.append({
                         'position': (i, j),
                         'strength': current_value,
-                        'frequency': (freq_x, freq_y)
+                        'frequency': (freq_x, freq_y),
+                        'local_average': local_average,
+                        'ratio': ratio
                     })
+                    
+                    print(f"            Peak found: strength={current_value:.6f}, "
+                          f"local_avg={local_average:.6f}, ratio={ratio:.1f}")
         
+        # Sort by strength as in original
         peaks.sort(key=lambda p: p['strength'], reverse=True)
         
-        print(f"          Found {len(peaks)} characteristic peaks")
+        print(f"          Kirchner method: {len(peaks)} peaks from {candidate_count} candidates")
         if peaks:
-            print(f"          Strongest peak: {peaks[0]['strength']:.6f}")
+            print(f"          Strongest peak: {peaks[0]['strength']:.6f} (ratio: {peaks[0]['ratio']:.1f})")
         
         return peaks
 
-    def make_decision(self, peaks):
+    def make_decision(self, peaks, spectrum):
         """
-        Step 6b: Make final resampling decision based on peak analysis.
-        """
-        if len(peaks) < self.min_peaks:
-            print(f"          Decision: NOT DETECTED (insufficient peaks: {len(peaks)} < {self.min_peaks})")
-            return False
+        Step 6b: Make final resampling decision using both paper methods.
         
+        Method 1: Peak-based detection (original method)
+        Method 2: Cumulative periodogram analysis (Section 5.2.2)
+        """
+        print(f"          Making decision using Kirchner paper methods...")
+        
+        # Method 1: Traditional peak-based detection
         strong_peaks = [p for p in peaks if p['strength'] > self.peak_threshold]
+        peak_detected = len(strong_peaks) >= self.min_peaks
         
-        if len(strong_peaks) >= self.min_peaks:
-            print(f"          Decision: DETECTED ({len(strong_peaks)} strong peaks found)")
-            return True
+        print(f"          Peak method: {len(strong_peaks)} strong peaks -> {'DETECTED' if peak_detected else 'NOT DETECTED'}")
+        
+        # Method 2: Cumulative periodogram method (Section 5.2.2)
+        periodogram_detected, max_gradient = self.detect_with_cumulative_periodogram(spectrum)
+        
+        # Final decision: Use OR logic (either method can detect)
+        final_detected = peak_detected or periodogram_detected
+        
+        if final_detected:
+            methods = []
+            if peak_detected:
+                methods.append("peaks")
+            if periodogram_detected:
+                methods.append("periodogram")
+            print(f"          DETECTED via: {', '.join(methods)}")
         else:
-            print(f"          Decision: NOT DETECTED (only {len(strong_peaks)} strong peaks)")
-            return False
+            print(f"          NOT DETECTED by either method")
+        
+        return final_detected
+
+    def detect_with_cumulative_periodogram(self, spectrum):
+        """
+        Kirchner paper Section 5.2.2: Automatic detection via cumulative periodograms.
+        
+        "delta' = max |delta C(f)|" (Equation 24)
+        "If delta' exceeds a specific threshold delta'_T, the signal is flagged as resampled"
+        """
+        print(f"          Cumulative periodogram method (Section 5.2.2)...")
+        
+        h, w = spectrum.shape
+        center_h, center_w = h // 2, w // 2
+        
+        # Use first quadrant only as described in paper
+        first_quadrant = spectrum[center_h:, center_w:]
+        
+        # Apply contrast function gamma (high-pass filter + gamma correction)
+        qh, qw = first_quadrant.shape
+        y, x = np.ogrid[:qh, :qw]
+        
+        # Radial distance from quadrant center
+        r = np.sqrt((x - qw//2)**2 + (y - qh//2)**2)
+        max_r = np.sqrt((qw//2)**2 + (qh//2)**2)
+        
+        # High-pass radial filter (attenuates low frequencies)
+        if max_r > 0:
+            radial_filter = np.clip(r / max_r, 0, 1)
+        else:
+            radial_filter = np.ones_like(first_quadrant)
+        
+        # Apply contrast function (gamma correction)
+        gamma = 2.0
+        gamma_corrected = (first_quadrant * radial_filter) ** gamma
+        
+        # Calculate cumulative periodogram C(f) (Equation 23)
+        flat_values = gamma_corrected.flatten()
+        total_energy = np.sum(flat_values**2)
+        
+        if total_energy == 0:
+            print(f"            No energy in spectrum")
+            return False, 0.0
+        
+        # Cumulative energy distribution
+        cumulative = np.cumsum(flat_values**2) / total_energy
+        
+        # Calculate maximum gradient delta' = max|∇C(f)| (Equation 24)
+        if len(cumulative) > 1:
+            gradients = np.diff(cumulative)
+            max_gradient = np.max(np.abs(gradients))
+        else:
+            max_gradient = 0.0
+        
+        print(f"            Max gradient delta': {max_gradient:.6f}")
+        print(f"            Threshold delta'_T: {self.gradient_threshold:.6f}")
+        
+        # Decision based on gradient threshold
+        detected = max_gradient > self.gradient_threshold
+        
+        print(f"            Periodogram result: {'DETECTED' if detected else 'NOT DETECTED'}")
+        
+        return detected, max_gradient
 
     def compute_cumulative_periodogram(self, spectrum):
         """
@@ -279,8 +387,10 @@ class KirchnerDetector:
         max_peak_threshold = self.peak_threshold
         max_peak_detected = max_peak > max_peak_threshold
         
-        # Final detection decision (primary criterion)
-        detected = len(strong_peaks) >= self.min_peaks
+        # Final detection decision using both methods
+        peak_decision = len(strong_peaks) >= self.min_peaks
+        periodogram_decision, _ = self.detect_with_cumulative_periodogram(spectrum)
+        detected = peak_decision or periodogram_decision
         
         return {
             # Basic metrics
@@ -301,7 +411,11 @@ class KirchnerDetector:
             'peak_ratio_detected': peak_ratio_detected,
             'max_peak': max_peak,
             'max_peak_threshold': max_peak_threshold,
-            'max_peak_detected': max_peak_detected
+            'max_peak_detected': max_peak_detected,
+            
+            # Paper method results
+            'peak_method_detected': peak_decision,
+            'periodogram_method_detected': periodogram_decision
         }
 
     def get_detector_info(self):
