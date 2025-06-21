@@ -40,11 +40,11 @@ class KirchnerDetector:
         self.sigma = sigma
         
         sensitivity_params = {
-            'low':    {'peak_threshold_T': 2.5,  'gradient_threshold': 0.008, 'min_peaks': 2}, 
-            'medium': {'peak_threshold_T': 3.5,  'gradient_threshold': 0.015, 'min_peaks': 2}, 
-            'high':   {'peak_threshold_T': 5.0,  'gradient_threshold': 0.025, 'min_peaks': 3}  
+            'low':      {'peak_threshold_T': 5.0,  'gradient_threshold': 0.08, 'min_peaks': 60}, 
+            'medium':   {'peak_threshold_T': 2.5,  'gradient_threshold': 0.0128, 'min_peaks': 14},  
+            'high':     {'peak_threshold_T': 2.5,  'gradient_threshold': 0.015, 'min_peaks': 15}    
         }
-        
+            
         params = sensitivity_params.get(sensitivity, sensitivity_params['medium'])
         self.peak_threshold_T = params['peak_threshold_T']  
         self.gradient_threshold = params['gradient_threshold']
@@ -118,20 +118,11 @@ class KirchnerDetector:
 
     def generate_p_map_fast(self, prediction_error):
         """
-        Fast P-map generation using exact Equation 21:
-        p = lambda * exp(-|e|^tau / sigma)
+        Fast P-map generation using exact Equation 21 without error normalization.
         """
         abs_error = np.abs(prediction_error)
-        
-        # Normalize error to reasonable range to avoid numerical issues
-        if np.max(abs_error) > 0:
-            abs_error = abs_error / np.max(abs_error)
-        
-        # Exact implementation of Equation 21 with numerical stability
         p_map = self.lambda_param * np.exp(-(abs_error ** self.tau) / self.sigma)
-        
         print(f"          P-map stats: range=[{np.min(p_map):.6f}, {np.max(p_map):.6f}], mean={np.mean(p_map):.6f}")
-        
         return p_map
 
     def compute_spectrum_with_contrast(self, p_map):
@@ -150,35 +141,36 @@ class KirchnerDetector:
         print(f"          DEBUG: Raw spectrum stats: min={np.min(spectrum):.6f}, max={np.max(spectrum):.6f}")
         
         # Apply MUCH gentler contrast function
-        spectrum = self.apply_gentle_contrast_function(spectrum)
+        spectrum = self.apply_contrast_function(spectrum)
         
         print(f"          DEBUG: After gentle contrast: min={np.min(spectrum):.6f}, max={np.max(spectrum):.6f}")
         print(f"          DEBUG: Non-zero values: {np.count_nonzero(spectrum)}/{spectrum.size}")
         
         return spectrum
 
-    def apply_gentle_contrast_function(self, spectrum):
+    def apply_contrast_function(self, spectrum, gamma=0.5):
         h, w = spectrum.shape
         center_h, center_w = h // 2, w // 2
-        
+
         y, x = np.ogrid[:h, :w]
         r = np.sqrt((x - center_w)**2 + (y - center_h)**2)
-        max_r = np.sqrt((center_w)**2 + (center_h)**2)
-        
+        max_r = np.sqrt(center_w**2 + center_h**2)
+
         if max_r > 0:
-            radial_weight = np.clip(r / (max_r * 0.05), 0.1, 1.0)
+            radial_weight = r / max_r
         else:
             radial_weight = np.ones_like(spectrum)
-        
+
         spectrum_weighted = spectrum * radial_weight
-        spectrum_log = np.log1p(spectrum_weighted)  # log(1 + x) for numerical stability
-        
-        if np.max(spectrum_log) > 0:
-            spectrum_normalized = spectrum_log / np.max(spectrum_log)
+
+        # Gamma correction to enhance peaks
+        if np.max(spectrum_weighted) > 0:
+            spectrum_normalized = spectrum_weighted / np.max(spectrum_weighted)
+            spectrum_enhanced = spectrum_normalized ** gamma
         else:
-            spectrum_normalized = spectrum_log
-        
-        return spectrum_normalized
+            spectrum_enhanced = spectrum_weighted
+
+        return spectrum_enhanced
 
     def analyze_spectrum_characteristics(self, spectrum):
         h, w = spectrum.shape
@@ -387,35 +379,22 @@ class KirchnerDetector:
             print(f"          No gradients calculated")
             return False, 0.0
         
-        max_gradient = np.max(np.abs(gradients))
+        max_gradient = np.max(np.abs(gradients)) if len(gradients) > 0 else 0.0
+        
+        gradient_threshold = self.gradient_threshold
         
         print(f"          Calculated max gradient: {max_gradient:.6f}")
-        print(f"          Gradient statistics: mean={np.mean(np.abs(gradients)):.6f}, std={np.std(gradients):.6f}")
+        print(f"          Using fixed threshold: {gradient_threshold:.6f}")
         
-        adaptive_threshold = max(0.001, np.std(gradients) * 2)
-        
-        print(f"          Using adaptive threshold: {adaptive_threshold:.6f}")
-        
-        detected = max_gradient > adaptive_threshold
+        detected = max_gradient > gradient_threshold
         
         return detected, max_gradient
 
     def load_image(self, img_path):
         try:
-            img = np.array(Image.open(img_path))
-            
-            if len(img.shape) == 3:
-                img = np.mean(img, axis=2)
-            
-            if max(img.shape) > 2048:
-                scale = 2048 / max(img.shape)
-                h, w = int(img.shape[0] * scale), int(img.shape[1] * scale)
-                img = cv2.resize(img, (w, h))
-            
+            img = np.array(Image.open(img_path).convert('L'))
             img = img.astype(np.float64)
-            if img.max() > 1:
-                img /= 255.0
-                
+
             return img
         except Exception as e:
             print(f"Error loading image {img_path}: {e}")

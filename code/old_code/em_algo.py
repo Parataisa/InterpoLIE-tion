@@ -368,19 +368,14 @@ class MemoryEfficientEMDetector:
         
         num_peaks = np.sum(spectrum_masked > threshold)
         strong_peaks = np.sum(spectrum_masked > strong_threshold)
-        peak_ratio = num_peaks / len(spectrum_masked)
-        max_peak = np.max(spectrum_masked)
         
         # More conservative detection criteria
         is_resampled = (
             (num_peaks > 8) and 
-            (peak_ratio > 0.005) and 
-            (max_peak > 0.5) and
             (strong_peaks >= 1)
         )
         
         print(f"🔍 Peak detection: {num_peaks} peaks, "
-              f"ratio: {peak_ratio:.4f}, max: {max_peak:.4f}, "
               f"strong peaks: {strong_peaks}")
         
         return is_resampled

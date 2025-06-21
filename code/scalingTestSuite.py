@@ -290,15 +290,7 @@ class ScalingTestSuite:
                 row.update({
                     'max_gradient': metrics.get('max_gradient', None),
                     'gradient_threshold': metrics.get('gradient_threshold', None),
-                    'gradient_detected': metrics.get('gradient_detected', None),
-                    'peak_ratio': metrics.get('peak_ratio', None),
-                    'peak_ratio_threshold': metrics.get('peak_ratio_threshold', None),
-                    'peak_ratio_detected': metrics.get('peak_ratio_detected', None),
-                    'max_peak': metrics.get('max_peak', None),
-                    'max_peak_threshold': metrics.get('max_peak_threshold', None),
-                    'max_peak_detected': metrics.get('max_peak_detected', None),
                     'peak_count': metrics.get('peak_count', None),
-                    'kirchner_peaks': metrics.get('kirchner_peaks', None),
                     'spectrum_mean': metrics.get('spectrum_mean', None),
                     'spectrum_std': metrics.get('spectrum_std', None),
                     'spectrum_max': metrics.get('spectrum_max', None)
@@ -321,12 +313,10 @@ class ScalingTestSuite:
             'detected': ['count', 'sum', 'mean'],
             'processing_time': 'mean',
             'max_gradient': 'mean',
-            'peak_ratio': 'mean', 
-            'max_peak': 'mean'
         }).round(6)
         
         scaling_analysis.columns = ['total_images', 'detected_count', 'detection_rate', 
-                                   'avg_processing_time', 'avg_max_gradient', 'avg_peak_ratio', 'avg_max_peak']
+                                   'avg_processing_time', 'avg_max_gradient']
         scaling_analysis = scaling_analysis.reset_index()
         
         detailed_results_path = output_path / 'scaling_results_detailed.csv'
@@ -379,8 +369,8 @@ class ScalingTestSuite:
         # Plot 2: Metrics comparison
         ax2 = axes[0, 1]
         if 'max_gradient' in detailed_df.columns:
-            metrics_to_plot = ['max_gradient', 'peak_ratio', 'max_peak']
-            metric_names = ['Max Gradient', 'Peak Ratio', 'Max Peak']
+            metrics_to_plot = ['max_gradient']
+            metric_names = ['Max Gradient']
             
             detected_data = detailed_df[detailed_df['detected'] == True]
             not_detected_data = detailed_df[detailed_df['detected'] == False]
@@ -392,11 +382,11 @@ class ScalingTestSuite:
             not_detected_means = []
             
             for col in metrics_to_plot:
-                detected_col = detected_data[col].infer_objects(copy=False).fillna(0)
+                detected_col = pd.to_numeric(detected_data[col], errors='coerce').fillna(0)
                 detected_mean = pd.to_numeric(detected_col, errors='coerce').mean()
                 detected_means.append(detected_mean if not pd.isna(detected_mean) else 0)
                 
-                not_detected_col = not_detected_data[col].infer_objects(copy=False).fillna(0)
+                not_detected_col = pd.to_numeric(not_detected_data[col], errors='coerce').fillna(0)
                 not_detected_mean = pd.to_numeric(not_detected_col, errors='coerce').mean()
                 not_detected_means.append(not_detected_mean if not pd.isna(not_detected_mean) else 0)
             
@@ -484,7 +474,7 @@ class ScalingTestSuite:
         
         plt.subplots_adjust(left=0.08, bottom=0.08, right=0.85, top=0.92, wspace=0.4, hspace=0.4)
         plot_path = output_path / 'scaling_analysis_report.png'
-        plt.savefig(plot_path, bbox_inches='tight', facecolor='white', dpi=150)
+        plt.savefig(plot_path, bbox_inches='tight', facecolor='white')
         plt.close()
         
         print(f"Analysis report saved to: {plot_path}")
@@ -502,7 +492,7 @@ def save_scaling_visualization(filename, p_map, spectrum, prediction_error, dete
 
     # 1. P-map (top-left)
     ax1 = fig.add_subplot(gs[0, 0])
-    im1 = ax1.imshow(p_map, cmap='gray', vmin=0, vmax=1)  # Grayscale as requested
+    im1 = ax1.imshow(p_map, cmap='gray', vmin=0, vmax=1)
     ax1.set_title('Probability Map (P-Map)', fontsize=12)
     ax1.set_xlabel('Pixel Column')
     ax1.set_ylabel('Pixel Row')
@@ -525,7 +515,7 @@ def save_scaling_visualization(filename, p_map, spectrum, prediction_error, dete
     freq_y = np.linspace(-0.5, 0.5, rows)
     
     spectrum_min = spectrum[spectrum > 0].min() if np.any(spectrum > 0) else 1e-6
-    im3 = ax3.imshow(spectrum, cmap='magma',
+    im3 = ax3.imshow(spectrum, cmap='inferno',
                     norm=LogNorm(vmin=spectrum_min, vmax=spectrum.max()),
                     extent=[freq_x[0], freq_x[-1], freq_y[-1], freq_y[0]],
                     origin='lower')
@@ -633,7 +623,7 @@ def save_scaling_visualization(filename, p_map, spectrum, prediction_error, dete
     
     base_name = filename.split(".")[0]
     output_path = output_folder / f'{base_name}_scale{scaling_factor:.1f}_{interpolation_method}_analysis.png'
-    fig.savefig(output_path, dpi=120, bbox_inches='tight', facecolor='white')
+    fig.savefig(output_path, bbox_inches='tight', facecolor='white')
     plt.close(fig)
     
     return str(output_path)
