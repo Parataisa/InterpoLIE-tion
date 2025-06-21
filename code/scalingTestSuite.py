@@ -17,15 +17,7 @@ from matplotlib.colors import LogNorm
 
 class ScalingTestSuite:
     def __init__(self, scaling_factors=None, interpolation_methods=None):
-        # self.scaling_factors = [
-        #     0.5, 0.6, 0.7, 0.8, 0.9,            # Downscaling
-        #     1.1, 1.2, 1.3, 1.4, 1.5,            # Moderate upscaling
-        #     1.6, 1.7, 1.8, 1.9, 2.0,            # Strong upscaling
-        #     2.5, 3.0                            # Extreme upscaling
-        # ]
-        self.scaling_factors = [
-            0.5, 0.8, 1.2, 1.5,
-        ]
+        self.scaling_factors = scaling_factors or [0.5, 0.8, 1.2, 1.5]
             
         self.interpolation_methods = {
             'nearest': cv2.INTER_NEAREST,
@@ -120,11 +112,6 @@ class ScalingTestSuite:
         
         print(f"Created {len(created_images)} test images")
         
-        config_df = pd.DataFrame(created_images)
-        config_path = output_path / 'test_configuration.csv'
-        config_df.to_csv(config_path, index=False)
-        print(f"Test configuration saved to: {config_path}")
-        
         return created_images, str(output_path)
 
     def process_with_detailed_metrics(self, img_path, detector):
@@ -137,21 +124,23 @@ class ScalingTestSuite:
             
             if detailed_metrics and detailed_metrics['peak_count'] == 0:
                 print(f"    DEBUG: No peaks detected. Spectrum max: {np.max(result['spectrum']):.6f}")
-                print(f"    DEBUG: Current peak threshold: {detector.peak_threshold:.6f}")
+                print(f"    DEBUG: Current peak threshold: {detector.peak_threshold_T:.6f}")
+                print(f"    DEBUG: Max gradient: {detailed_metrics.get('max_gradient', 0):.6f}")
+                print(f"    DEBUG: Gradient threshold: {detailed_metrics.get('gradient_threshold', 0):.6f}")
                 
-                original_threshold = detector.peak_threshold
-                detector.peak_threshold = detector.peak_threshold * 0.5  # Lower threshold
-                debug_peaks = detector.detect_characteristic_peaks(result['spectrum'])
-                detector.peak_threshold = original_threshold  # Restore original
+                original_threshold = detector.peak_threshold_T
+                detector.peak_threshold_T = detector.peak_threshold_T * 0.1
+                debug_peaks = detector.detect_peaks_fast(result['spectrum']) 
+                detector.peak_threshold_T = original_threshold
                 
                 if debug_peaks:
-                    print(f"    DEBUG: With lower threshold, found {len(debug_peaks)} peaks")
+                    print(f"    DEBUG: With 10x lower threshold, found {len(debug_peaks)} peaks")
                     print(f"    DEBUG: Strongest peak: {debug_peaks[0]['strength']:.6f}")
                 else:
-                    print(f"    DEBUG: Even with lower threshold, no peaks found")
+                    print(f"    DEBUG: Even with 10x lower threshold, no peaks found")
             
             processing_time = time.time() - start_time
-            print(f"    Completed in {processing_time:.2f}s")
+            print(f"    Detection: {'YES' if result['detected'] else 'NO'} in {processing_time:.2f}s")
             
             return {
                 'file_name': Path(img_path).name,
@@ -173,7 +162,7 @@ class ScalingTestSuite:
             }
 
     def run_scaling_test(self, input_folder, output_folder=None, sensitivity='medium', detector_class=None):
-        """Run complete scaling test suite."""
+        """Run complete scaling test suite with single sensitivity."""
         if output_folder is None:
             timestamp = time.strftime('%Y%m%d_%H%M%S')
             output_folder = f'scaling_test_{timestamp}'
@@ -195,10 +184,10 @@ class ScalingTestSuite:
             
         detector = detector_class(sensitivity=sensitivity)
         print(f"Using detector with sensitivity: {sensitivity}")
-        print(f"Peak threshold: {detector.peak_threshold}")
+        print(f"Peak threshold: {detector.peak_threshold_T}")
         print(f"Min peaks required: {detector.min_peaks}")
+        print(f"Gradient threshold: {detector.gradient_threshold}")
         
-        # Find all created images
         images = []
         for file_path in Path(scaled_folder).rglob('*'):
             if file_path.is_file() and file_path.suffix.lower() in {'.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp', '.webp'}:
@@ -206,37 +195,54 @@ class ScalingTestSuite:
         
         print(f"Found {len(images)} images to process")
         
-        # Process images with detailed metrics
         results = []
         for i, img_path in enumerate(images):
             print(f"Processing {i+1}/{len(images)}: {img_path.name}")
             result = self.process_with_detailed_metrics(img_path, detector)
             results.append(result)
-            
-            status = 'DETECTED' if result.get('detected') else 'NOT DETECTED'
-            if 'error' in result:
-                status = 'ERROR'
-            print(f"    Result: {status}")
         
         # Step 3: Create detailed visualizations
-        print("\n=== STEP 3: Creating detailed visualizations ===")
+        print("\n=== STEP 3: Creating organized visualizations ===")
         vis_folder = output_path / 'visualizations'
         vis_folder.mkdir(exist_ok=True)
         
-        visualization_count = 0
+        results_by_image = {}
         for result in results:
             if 'error' not in result and result['p_map'] is not None:
+                filename = result['file_name']
+                if '_scale' in filename:
+                    original_name = filename.split('_scale')[0]
+                elif '_original' in filename:
+                    original_name = filename.split('_original')[0]
+                else:
+                    original_name = filename.split('.')[0]
+                
+                if original_name not in results_by_image:
+                    results_by_image[original_name] = []
+                results_by_image[original_name].append(result)
+        
+        print(f"Found {len(results_by_image)} original images with variants")
+        
+        visualization_count = 0
+        for original_name, image_results in results_by_image.items():
+            image_vis_folder = vis_folder / original_name
+            image_vis_folder.mkdir(exist_ok=True)
+            print(f"  Processing {len(image_results)} variants of {original_name} (including original)")
+            
+            for result in image_results:
                 try:
                     filename = result['file_name']
                     scaling_factor = 1.0
                     interpolation_method = 'original'
                     
-                    # Parse scaling info from filename
                     if '_scale' in filename:
                         parts = filename.split('_scale')[1].split('_')
                         if len(parts) >= 2:
                             scaling_factor = float(parts[0])
                             interpolation_method = parts[1].split('.')[0]
+                    elif '_original' in filename:
+                        scaling_factor = 1.0
+                        interpolation_method = 'original'
                     
                     save_scaling_visualization(
                         result['file_name'],
@@ -247,13 +253,13 @@ class ScalingTestSuite:
                         scaling_factor,
                         interpolation_method,
                         result['detailed_metrics'],
-                        vis_folder
+                        image_vis_folder
                     )
                     visualization_count += 1
                 except Exception as e:
-                    print(f"Warning: Could not create visualization for {result['file_name']}: {e}")
+                    print(f"    Warning: Could not create visualization for {result['file_name']}: {e}")
         
-        print(f"Created {visualization_count} visualizations")
+        print(f"Created {visualization_count} visualizations in {len(results_by_image)} folders")
         
         # Step 4: Analyze results
         print("\n=== STEP 4: Analyzing results ===")
@@ -264,7 +270,8 @@ class ScalingTestSuite:
         self.create_scaling_report(analysis_results, output_path)
         
         print(f"\nScaling test completed! Results in: {output_path}")
-        print(f"Overall detection rate: {analysis_results['overall_detection_rate']:.3f}")
+        if 'overall_detection_rate' in analysis_results:
+            print(f"Overall detection rate: {analysis_results['overall_detection_rate']:.3f}")
         return analysis_results
 
     def analyze_scaling_results(self, created_images, detection_results, output_path):
@@ -282,20 +289,25 @@ class ScalingTestSuite:
                 metrics = result['detailed_metrics']
                 row.update({
                     'max_gradient': metrics.get('max_gradient', None),
+                    'gradient_threshold': metrics.get('gradient_threshold', None),
                     'gradient_detected': metrics.get('gradient_detected', None),
                     'peak_ratio': metrics.get('peak_ratio', None),
+                    'peak_ratio_threshold': metrics.get('peak_ratio_threshold', None),
                     'peak_ratio_detected': metrics.get('peak_ratio_detected', None),
                     'max_peak': metrics.get('max_peak', None),
+                    'max_peak_threshold': metrics.get('max_peak_threshold', None),
                     'max_peak_detected': metrics.get('max_peak_detected', None),
                     'peak_count': metrics.get('peak_count', None),
-                    'kirchner_peaks': metrics.get('kirchner_peaks', None)
+                    'kirchner_peaks': metrics.get('kirchner_peaks', None),
+                    'spectrum_mean': metrics.get('spectrum_mean', None),
+                    'spectrum_std': metrics.get('spectrum_std', None),
+                    'spectrum_max': metrics.get('spectrum_max', None)
                 })
             
             results_data.append(row)
         
         detection_df = pd.DataFrame(results_data)
         
-        # Merge configuration with results
         config_df['file_name'] = config_df['file_path'].apply(lambda x: os.path.basename(x))
         if not detection_df.empty:
             merged_df = config_df.merge(detection_df, on='file_name', how='left')
@@ -303,20 +315,23 @@ class ScalingTestSuite:
             merged_df = config_df.copy()
             merged_df['detected'] = False
         
-        merged_df['detected'] = merged_df['detected'].fillna(False)
+        merged_df['detected'] = merged_df['detected'].infer_objects(copy=False).fillna(False)
         
-        # Create scaling factor analysis
         scaling_analysis = merged_df.groupby(['scaling_factor', 'interpolation']).agg({
             'detected': ['count', 'sum', 'mean'],
-            'processing_time': 'mean'
-        }).round(4)
+            'processing_time': 'mean',
+            'max_gradient': 'mean',
+            'peak_ratio': 'mean', 
+            'max_peak': 'mean'
+        }).round(6)
         
-        scaling_analysis.columns = ['total_images', 'detected_count', 'detection_rate', 'avg_processing_time']
+        scaling_analysis.columns = ['total_images', 'detected_count', 'detection_rate', 
+                                   'avg_processing_time', 'avg_max_gradient', 'avg_peak_ratio', 'avg_max_peak']
         scaling_analysis = scaling_analysis.reset_index()
         
-        detailed_results_path = output_path / 'scaling_results.csv'
+        detailed_results_path = output_path / 'scaling_results_detailed.csv'
         merged_df.to_csv(detailed_results_path, index=False)
-        print(f"Detailed results saved to: {detailed_results_path}")
+        print(f"Detailed results with metrics saved to: {detailed_results_path}")
         
         scaling_results_path = output_path / 'scaling_factor_analysis.csv'
         scaling_analysis.to_csv(scaling_results_path, index=False)
@@ -333,7 +348,6 @@ class ScalingTestSuite:
         detailed_df = analysis_results['detailed_results']
         scaling_df = analysis_results['scaling_analysis']
         
-        # Set up the figure
         fig, axes = plt.subplots(2, 2, figsize=(16, 12))
         fig.suptitle('Kirchner Detector: Scaling Factor Analysis with Detailed Metrics', 
                      fontsize=16, fontweight='bold')
@@ -341,48 +355,64 @@ class ScalingTestSuite:
         # Plot 1: Detection rate by scaling factor
         ax1 = axes[0, 0]
         if len(scaling_df) > 0:
-            for interp_method in scaling_df['interpolation'].unique():
+            colors = ['blue', 'red', 'green', 'orange', 'purple']
+            markers = ['o', 's', '^', 'D', 'v']
+            
+            for i, interp_method in enumerate(scaling_df['interpolation'].unique()):
                 method_data = scaling_df[scaling_df['interpolation'] == interp_method]
+                color = colors[i % len(colors)]
+                marker = markers[i % len(markers)]
                 ax1.plot(method_data['scaling_factor'], method_data['detection_rate'], 
-                        'o-', label=interp_method, linewidth=2, markersize=6)
+                        marker=marker, linestyle='-', label=interp_method, 
+                        linewidth=2, markersize=8, color=color)
             
             ax1.set_xlabel('Scaling Factor')
             ax1.set_ylabel('Detection Rate')
             ax1.set_title('Detection Rate vs Scaling Factor')
-            ax1.legend()
+            ax1.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
             ax1.grid(True, alpha=0.3)
-            ax1.axvline(x=1.0, color='red', linestyle='--', alpha=0.5, label='Original')
+            ax1.axvline(x=1.0, color='black', linestyle='--', alpha=0.5, label='Original')
         else:
             ax1.text(0.5, 0.5, 'No scaling data available', 
                     ha='center', va='center', transform=ax1.transAxes)
         
-        # Plot 2: Detection criteria analysis
+        # Plot 2: Metrics comparison
         ax2 = axes[0, 1]
         if 'max_gradient' in detailed_df.columns:
-            criteria_cols = ['gradient_detected', 'peak_ratio_detected', 'max_peak_detected']
-            criteria_names = ['Max Gradient', 'Peak Ratio', 'Max Peak']
+            metrics_to_plot = ['max_gradient', 'peak_ratio', 'max_peak']
+            metric_names = ['Max Gradient', 'Peak Ratio', 'Max Peak']
             
-            detection_rates = []
-            for col in criteria_cols:
-                if col in detailed_df.columns:
-                    rate = detailed_df[col].fillna(False).mean()
-                    detection_rates.append(rate)
-                else:
-                    detection_rates.append(0)
+            detected_data = detailed_df[detailed_df['detected'] == True]
+            not_detected_data = detailed_df[detailed_df['detected'] == False]
             
-            bars = ax2.bar(criteria_names, detection_rates, color=['skyblue', 'lightcoral', 'lightgreen'])
-            ax2.set_ylabel('Detection Rate')
-            ax2.set_title('Detection Rate by Criteria')
-            ax2.set_ylim(0, 1)
+            x_pos = np.arange(len(metric_names))
+            width = 0.35
             
-            for bar, rate in zip(bars, detection_rates):
-                height = bar.get_height()
-                ax2.text(bar.get_x() + bar.get_width()/2., height + 0.01,
-                        f'{rate:.3f}', ha='center', va='bottom')
+            detected_means = []
+            not_detected_means = []
+            
+            for col in metrics_to_plot:
+                detected_col = detected_data[col].infer_objects(copy=False).fillna(0)
+                detected_mean = pd.to_numeric(detected_col, errors='coerce').mean()
+                detected_means.append(detected_mean if not pd.isna(detected_mean) else 0)
+                
+                not_detected_col = not_detected_data[col].infer_objects(copy=False).fillna(0)
+                not_detected_mean = pd.to_numeric(not_detected_col, errors='coerce').mean()
+                not_detected_means.append(not_detected_mean if not pd.isna(not_detected_mean) else 0)
+            
+            ax2.bar(x_pos - width/2, detected_means, width, label='Detected', color='lightgreen', alpha=0.8)
+            ax2.bar(x_pos + width/2, not_detected_means, width, label='Not Detected', color='lightcoral', alpha=0.8)
+            
+            ax2.set_xlabel('Metrics')
+            ax2.set_ylabel('Average Value')
+            ax2.set_title('Metrics: Detected vs Not Detected')
+            ax2.set_xticks(x_pos)
+            ax2.set_xticklabels(metric_names)
+            ax2.legend()
+            ax2.grid(True, alpha=0.3)
         else:
             ax2.text(0.5, 0.5, 'No detailed metrics available', 
                     ha='center', va='center', transform=ax2.transAxes)
-        
         # Plot 3: Heatmap of detection rates
         ax3 = axes[1, 0]
         if len(scaling_df) > 0 and len(scaling_df['interpolation'].unique()) > 1:
@@ -397,6 +427,12 @@ class ScalingTestSuite:
                 ax3.set_xlabel('Scaling Factor')
                 ax3.set_ylabel('Interpolation Method')
                 ax3.set_title('Detection Rate Heatmap')
+                
+                # Add text annotations for values
+                for i in range(len(pivot_data.index)):
+                    for j in range(len(pivot_data.columns)):
+                        text = f'{pivot_data.values[i, j]:.2f}'
+                        ax3.text(j, i, text, ha="center", va="center", color="black", fontsize=8)
                 
                 cbar = plt.colorbar(im, ax=ax3, shrink=0.8)
                 cbar.set_label('Detection Rate')
@@ -417,24 +453,28 @@ class ScalingTestSuite:
                 total_images = len(peak_counts)
                 
                 if peak_counts.max() > 0:
-                    non_zero_peaks = peak_counts[peak_counts > 0]
-                    if len(non_zero_peaks) > 0:
-                        ax4.hist(non_zero_peaks, bins=min(20, len(non_zero_peaks)), alpha=0.7, edgecolor='black')
-                        ax4.axvline(non_zero_peaks.mean(), color='red', linestyle='--', 
-                                   linewidth=2, label=f'Mean: {non_zero_peaks.mean():.1f}')
-                        ax4.set_xlabel('Peak Count (Non-Zero Only)')
-                        ax4.set_ylabel('Frequency')
-                        ax4.set_title(f'Peak Count Distribution\n{zero_peaks}/{total_images} images had 0 peaks')
-                        ax4.legend()
-                        ax4.grid(True, alpha=0.3)
-                    else:
-                        ax4.text(0.5, 0.5, f'All {total_images} images had 0 peaks\nCheck peak detection thresholds', 
-                                ha='center', va='center', transform=ax4.transAxes, 
-                                bbox=dict(boxstyle='round', facecolor='yellow', alpha=0.8))
+                    bins = np.arange(0, peak_counts.max() + 2) - 0.5
+                    ax4.hist(peak_counts, bins=bins, alpha=0.7, edgecolor='black')
+                    ax4.axvline(peak_counts.mean(), color='red', linestyle='--', 
+                               linewidth=2, label=f'Mean: {peak_counts.mean():.1f}')
+                    ax4.set_xlabel('Peak Count')
+                    ax4.set_ylabel('Frequency')
+                    ax4.set_title(f'Peak Count Distribution\n{zero_peaks}/{total_images} images had 0 peaks')
+                    ax4.legend()
+                    ax4.grid(True, alpha=0.3)
+                    
+                    non_zero_detected = detailed_df[(detailed_df['peak_count'] > 0) & (detailed_df['detected'] == True)]
+                    if len(non_zero_detected) > 0:
+                        detection_rate_with_peaks = len(non_zero_detected) / len(detailed_df[detailed_df['peak_count'] > 0])
+                        ax4.text(0.02, 0.98, f'Detection rate with peaks: {detection_rate_with_peaks:.2f}', 
+                                transform=ax4.transAxes, verticalalignment='top',
+                                bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.8))
                 else:
-                    ax4.text(0.5, 0.5, f'All {total_images} images had 0 peaks\nPeak detection may need tuning', 
+                    ax4.text(0.5, 0.5, f'All {total_images} images had 0 peaks\nCheck detection thresholds:\n' +
+                            f'Peak threshold: {detailed_df["max_peak_threshold"].iloc[0] if "max_peak_threshold" in detailed_df.columns else "N/A"}\n' +
+                            f'Gradient threshold: {detailed_df["gradient_threshold"].iloc[0] if "gradient_threshold" in detailed_df.columns else "N/A"}', 
                             ha='center', va='center', transform=ax4.transAxes,
-                            bbox=dict(boxstyle='round', facecolor='orange', alpha=0.8))
+                            bbox=dict(boxstyle='round', facecolor='yellow', alpha=0.8))
             else:
                 ax4.text(0.5, 0.5, 'No peak count data available', 
                         ha='center', va='center', transform=ax4.transAxes)
@@ -442,10 +482,7 @@ class ScalingTestSuite:
             ax4.text(0.5, 0.5, 'No peak count data available', 
                     ha='center', va='center', transform=ax4.transAxes)
         
-        # Adjust layout
-        plt.subplots_adjust(left=0.08, bottom=0.08, right=0.95, top=0.92, wspace=0.3, hspace=0.4)
-        
-        # Save plot
+        plt.subplots_adjust(left=0.08, bottom=0.08, right=0.85, top=0.92, wspace=0.4, hspace=0.4)
         plot_path = output_path / 'scaling_analysis_report.png'
         plt.savefig(plot_path, bbox_inches='tight', facecolor='white', dpi=150)
         plt.close()
@@ -455,17 +492,17 @@ class ScalingTestSuite:
 
 def save_scaling_visualization(filename, p_map, spectrum, prediction_error, detected, 
                          scaling_factor, interpolation_method, detailed_metrics, output_folder):
-    fig = plt.figure(figsize=(16, 12)) 
-    gs = fig.add_gridspec(3, 2, height_ratios=[1, 1, 0.7], hspace=0.4, wspace=0.3)
+    fig = plt.figure(figsize=(16, 14))  # Increased height for better spacing
+    gs = fig.add_gridspec(3, 2, height_ratios=[1, 1, 1], hspace=0.35, wspace=0.3)  # More spacing
     
     title_color = 'red' if detected else 'green'
     status = "DETECTED" if detected else "NOT DETECTED"
     fig.suptitle(f'{filename} - {status}\nScale: {scaling_factor:.1f}x, Method: {interpolation_method}',
-                fontsize=16, fontweight='bold', color=title_color, y=0.95) 
+                fontsize=16, fontweight='bold', color=title_color, y=0.96) 
 
     # 1. P-map (top-left)
     ax1 = fig.add_subplot(gs[0, 0])
-    im1 = ax1.imshow(p_map, cmap='hot', vmin=0, vmax=1)
+    im1 = ax1.imshow(p_map, cmap='gray', vmin=0, vmax=1)  # Grayscale as requested
     ax1.set_title('Probability Map (P-Map)', fontsize=12)
     ax1.set_xlabel('Pixel Column')
     ax1.set_ylabel('Pixel Row')
@@ -488,7 +525,7 @@ def save_scaling_visualization(filename, p_map, spectrum, prediction_error, dete
     freq_y = np.linspace(-0.5, 0.5, rows)
     
     spectrum_min = spectrum[spectrum > 0].min() if np.any(spectrum > 0) else 1e-6
-    im3 = ax3.imshow(spectrum, cmap='inferno',
+    im3 = ax3.imshow(spectrum, cmap='magma',
                     norm=LogNorm(vmin=spectrum_min, vmax=spectrum.max()),
                     extent=[freq_x[0], freq_x[-1], freq_y[-1], freq_y[0]],
                     origin='lower')
@@ -516,44 +553,44 @@ def save_scaling_visualization(filename, p_map, spectrum, prediction_error, dete
     ax4.text(0.02, 0.98, stats_text, transform=ax4.transAxes, 
             verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
 
-    # 5. Enhanced Detailed Metrics Table (bottom, full width)
+    # 5. Detection Criteria Table (bottom, full width)
     ax_table = fig.add_subplot(gs[2, :])
     ax_table.axis('off')
     
-    headers = ['Detection Criterion', 'Measured Value', 'Threshold', 'Result', 'Peak Analysis']
+    headers = ['Detection Method', 'Measured Value', 'Threshold', 'Result', 'Additional Info']
     
     peak_count = detailed_metrics.get('peak_count', 0)
     peak_info = f"{peak_count} peaks found"
     if peak_count == 0:
-        peak_info += "\n(May need threshold tuning)"
+        peak_info += " (No significant peaks)"
         
     table_data = [
-        ['Maximum Gradient', 
-         f"{detailed_metrics.get('max_gradient', 0):.5f}", 
-         f">{detailed_metrics.get('gradient_threshold', 0):.5f}",
-         "✓ PASS" if detailed_metrics.get('gradient_detected', False) else "✗ FAIL",
+        ['Gradient Analysis', 
+         f"{detailed_metrics.get('max_gradient', 0):.6f}", 
+         f">{detailed_metrics.get('gradient_threshold', 0):.6f}",
+         "✓ DETECTED" if detailed_metrics.get('gradient_method_detected', False) else "○ CLEAN",
          peak_info],
         
-        ['Peak Ratio', 
-         f"{detailed_metrics.get('peak_ratio', 0):.3f}", 
-         f"≥{detailed_metrics.get('peak_ratio_threshold', 0):.3f}",
-         "✓ PASS" if detailed_metrics.get('peak_ratio_detected', False) else "✗ FAIL",
-         "✓ Found" if detailed_metrics.get('kirchner_peaks', False) else "✗ None"],
+        ['Peak Detection', 
+         f"{detailed_metrics.get('max_peak_strength', 0):.4f}", 
+         f"T={detailed_metrics.get('peak_threshold_T', 0):.1f}",
+         "✓ DETECTED" if detailed_metrics.get('peak_method_detected', False) else "○ CLEAN",
+         f"Min peaks: {detailed_metrics.get('min_peaks', 1)}"],
         
-        ['Maximum Peak Strength', 
-         f"{detailed_metrics.get('max_peak', 0):.5f}", 
-         f">{detailed_metrics.get('max_peak_threshold', 0):.5f}",
-         "✓ PASS" if detailed_metrics.get('max_peak_detected', False) else "✗ FAIL",
-         f"Spectrum max: {detailed_metrics.get('spectrum_max', 0):.3f}"]
+        ['Spectrum Analysis', 
+         f"Max: {detailed_metrics.get('spectrum_max', 0):.4f}", 
+         f"Mean: {detailed_metrics.get('spectrum_mean', 0):.4f}",
+         "✓ DETECTED" if detected else "○ CLEAN",
+         f"Std: {detailed_metrics.get('spectrum_std', 0):.4f}"]
     ]
     
     table = ax_table.table(cellText=table_data, colLabels=headers,
                         cellLoc='center', loc='center',
-                        bbox=[0.05, 0.1, 0.9, 0.8])
+                        bbox=[0.05, 0.25, 0.9, 0.65])
     
     table.auto_set_font_size(False)
-    table.set_fontsize(10)  # Increased font size
-    table.scale(1.0, 2.0)   # Better vertical scaling
+    table.set_fontsize(10)
+    table.scale(1.0, 1.8)
     
     cellDict = table.get_celld()
     n_rows, n_cols = len(table_data) + 1, len(headers)
@@ -562,38 +599,37 @@ def save_scaling_visualization(filename, p_map, spectrum, prediction_error, dete
         for j in range(n_cols):
             cell = cellDict.get((i, j))
             if cell:
-                cell.set_height(0.15)  # Consistent row height
+                cell.set_height(0.10)
                 cell.set_linewidth(1)
                 cell.set_edgecolor('gray')
                 
-                # Header styling
-                if i == 0:
+                if i == 0:  # Header
                     cell.set_facecolor('#e8e8e8')
                     cell.set_text_props(weight='bold', size=10)
                 else:
                     if j == 3:  # Result column
                         text = table_data[i-1][j]
-                        if "✓ PASS" in text:
-                            cell.set_facecolor('#d4edda')  # Light green
-                        elif "✗ FAIL" in text:
-                            cell.set_facecolor('#f8d7da')  # Light red
-                    elif j == 4 and "tuning" in str(table_data[i-1][j]):  # Peak analysis with warning
+                        if "✓ DETECTED" in text:
+                            cell.set_facecolor('#d4edda')  # Light green for detection
+                        elif "○ CLEAN" in text:
+                            cell.set_facecolor('#e7f3ff')  # Light blue for clean
+                    elif j == 4 and "No significant" in str(table_data[i-1][j]):
                         cell.set_facecolor('#fff3cd')  # Warning yellow
                     
                     cell.set_text_props(size=9)
     
-    ax_table.text(0.5, 0.98, 'Detection Criteria Analysis', 
+    ax_table.text(0.5, 1.00, 'Detection Criteria Analysis', 
                  ha='center', va='top', transform=ax_table.transAxes,
                  fontsize=14, fontweight='bold')
     
-    overall_status = "RESAMPLING DETECTED" if detected else "NO RESAMPLING DETECTED"
-    status_color = 'red' if detected else 'green'
-    ax_table.text(0.5, 0.02, f'Overall Result: {overall_status}', 
+    overall_status = "RESAMPLING DETECTED" if detected else "IMAGE CLEAN"
+    status_color = 'red' if detected else 'blue'
+    ax_table.text(0.5, 0.10, f'Overall Result: {overall_status}', 
                  ha='center', va='bottom', transform=ax_table.transAxes,
                  fontsize=12, fontweight='bold', color=status_color,
                  bbox=dict(boxstyle='round,pad=0.3', facecolor='white', edgecolor=status_color))
 
-    plt.subplots_adjust(left=0.08, bottom=0.08, right=0.95, top=0.88, wspace=0.25, hspace=0.35)
+    plt.subplots_adjust(left=0.08, bottom=0.06, right=0.95, top=0.90, wspace=0.25, hspace=0.4)
     
     base_name = filename.split(".")[0]
     output_path = output_folder / f'{base_name}_scale{scaling_factor:.1f}_{interpolation_method}_analysis.png'
@@ -604,5 +640,6 @@ def save_scaling_visualization(filename, p_map, spectrum, prediction_error, dete
 
 
 def run_scaling_test(input_folder, scaling_factors=None, sensitivity='medium', output_folder=None, detector_class=None):
+    """Run single sensitivity scaling test with detailed metrics in CSV."""
     test_suite = ScalingTestSuite(scaling_factors=scaling_factors)
     return test_suite.run_scaling_test(input_folder, output_folder, sensitivity, detector_class)
