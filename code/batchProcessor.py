@@ -53,9 +53,7 @@ class BatchProcessor:
                 'lambda_param': detector_info['lambda_param'],
                 'tau': detector_info['tau'],
                 'sigma': detector_info['sigma'],
-                'peak_threshold_T': detector_info['peak_threshold_T'],
                 'gradient_threshold': detector_info['gradient_threshold'],
-                'min_peaks': detector_info['min_peaks']
             })
             
             return base_result
@@ -187,26 +185,19 @@ def create_single_visualization(result, vis_folder):
     # Get detection metrics
     from kirchner import KirchnerDetector
     temp_detector = KirchnerDetector()
-    peaks = temp_detector.detect_peaks_fast(spectrum)
-    gradient_detected, max_gradient = temp_detector.detect_cumulative_periodogram(spectrum)
-    peak_detected = len(peaks) >= temp_detector.min_peaks
+    gradient_detected, max_gradient, gradient_map = temp_detector.detect_cumulative_periodogram(spectrum)
     
     # Create clearer table
     table_data = [
-        ['Peak Detection (Section 3.4)', 
-         f'{len(peaks)} peaks', 
-         f'≥{temp_detector.min_peaks} required',
-         'PASS' if peak_detected else 'NOT DETECTED'],
-        
         ['Gradient Analysis (Section 5.2.2)', 
          f'{max_gradient:.4f}', 
          f'>{temp_detector.gradient_threshold:.4f}',
          'PASS' if gradient_detected else 'NOT DETECTED'],
          
         ['Final Decision', 
-         'Peak OR Gradient', 
-         'Either method passes',
-         'DETECTED' if detected else 'NOT DETECTED']
+        f'Gradient = {max_gradient:.4f}', 
+        f'>{temp_detector.gradient_threshold:.4f}', 
+        'DETECTED' if detected else 'NOT DETECTED']
     ]
     
     headers = ['Method', 'Measured Value', 'Threshold', 'Result']

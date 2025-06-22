@@ -17,7 +17,7 @@ from matplotlib.colors import LogNorm
 
 class ScalingTestSuite:
     def __init__(self, scaling_factors=None, interpolation_methods=None):
-        self.scaling_factors = scaling_factors or [0.5, 0.6, 0.7, 0.8, 0.9, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0]
+        self.scaling_factors = scaling_factors or [0.5, 0.8, 1.2, 1.6, 2.0]
             
         self.interpolation_methods = {
             'nearest': cv2.INTER_NEAREST,
@@ -127,7 +127,7 @@ class ScalingTestSuite:
                 'error': str(e)
             }
 
-    def run_scaling_test(self, input_folder, output_folder=None, sensitivity='medium', detector_class=None):
+    def run_scaling_test(self, input_folder, output_folder=None, sensitivity='medium', detector_class=None, create_visualizations=True):
         """Run complete scaling test suite."""
         if output_folder is None:
             timestamp = time.strftime('%Y%m%d_%H%M%S')
@@ -163,65 +163,65 @@ class ScalingTestSuite:
             print(f"Processing {i+1}/{len(images)}: {img_path.name}")
             result = self.process_with_detailed_metrics(img_path, detector)
             results.append(result)
-        
-        # Step 3: Create visualizations
-        print("\n=== STEP 3: Creating visualizations ===")
-        vis_folder = output_path / 'visualizations'
-        vis_folder.mkdir(exist_ok=True)
-        
-        results_by_image = {}
-        for result in results:
-            if 'error' not in result and result['p_map'] is not None:
-                filename = result['file_name']
-                if '_scale' in filename:
-                    original_name = filename.split('_scale')[0]
-                elif '_original' in filename:
-                    original_name = filename.split('_original')[0]
-                else:
-                    original_name = filename.split('.')[0]
-                
-                if original_name not in results_by_image:
-                    results_by_image[original_name] = []
-                results_by_image[original_name].append(result)
-        
-        print(f"Creating visualizations for {len(results_by_image)} original images")
-        
-        visualization_count = 0
-        for original_name, image_results in results_by_image.items():
-            image_vis_folder = vis_folder / original_name
-            image_vis_folder.mkdir(exist_ok=True)
+        if create_visualizations:
+            # Step 3: Create visualizations
+            print("\n=== STEP 3: Creating visualizations ===")
+            vis_folder = output_path / 'visualizations'
+            vis_folder.mkdir(exist_ok=True)
             
-            for result in image_results:
-                try:
+            results_by_image = {}
+            for result in results:
+                if 'error' not in result and result['p_map'] is not None:
                     filename = result['file_name']
-                    scaling_factor = 1.0
-                    interpolation_method = 'original'
-                    
                     if '_scale' in filename:
-                        parts = filename.split('_scale')[1].split('_')
-                        if len(parts) >= 2:
-                            scaling_factor = float(parts[0])
-                            interpolation_method = parts[1].split('.')[0]
+                        original_name = filename.split('_scale')[0]
                     elif '_original' in filename:
+                        original_name = filename.split('_original')[0]
+                    else:
+                        original_name = filename.split('.')[0]
+                    
+                    if original_name not in results_by_image:
+                        results_by_image[original_name] = []
+                    results_by_image[original_name].append(result)
+            
+            print(f"Creating visualizations for {len(results_by_image)} original images")
+            
+            visualization_count = 0
+            for original_name, image_results in results_by_image.items():
+                image_vis_folder = vis_folder / original_name
+                image_vis_folder.mkdir(exist_ok=True)
+                
+                for result in image_results:
+                    try:
+                        filename = result['file_name']
                         scaling_factor = 1.0
                         interpolation_method = 'original'
-                    
-                    save_scaling_visualization(
-                        result['file_name'],
-                        result['p_map'],
-                        result['spectrum'],
-                        result['prediction_error'],
-                        result['detected'],
-                        scaling_factor,
-                        interpolation_method,
-                        result['detailed_metrics'],
-                        image_vis_folder
-                    )
-                    visualization_count += 1
-                except Exception as e:
-                    print(f"    Warning: Could not create visualization for {result['file_name']}: {e}")
-        
-        print(f"Created {visualization_count} visualizations")
+                        
+                        if '_scale' in filename:
+                            parts = filename.split('_scale')[1].split('_')
+                            if len(parts) >= 2:
+                                scaling_factor = float(parts[0])
+                                interpolation_method = parts[1].split('.')[0]
+                        elif '_original' in filename:
+                            scaling_factor = 1.0
+                            interpolation_method = 'original'
+                        
+                        save_scaling_visualization(
+                            result['file_name'],
+                            result['p_map'],
+                            result['spectrum'],
+                            result['prediction_error'],
+                            result['detected'],
+                            scaling_factor,
+                            interpolation_method,
+                            result['detailed_metrics'],
+                            image_vis_folder
+                        )
+                        visualization_count += 1
+                    except Exception as e:
+                        print(f"    Warning: Could not create visualization for {result['file_name']}: {e}")
+            
+            print(f"Created {visualization_count} visualizations")
         
         # Step 4: Analyze results
         print("\n=== STEP 4: Analyzing results ===")
@@ -383,20 +383,34 @@ class ScalingTestSuite:
                 ax3.text(0.5, 0.5, f'Heatmap unavailable', 
                         ha='center', va='center', transform=ax3.transAxes)
         
-        # Plot 4: Processing time analysis
+        # Plot 4: Max ∇C(f) vs Scaling Factor
         ax4 = axes[1, 1]
-        if 'processing_time' in detailed_df.columns:
-            processing_times = detailed_df['processing_time'].dropna()
+        if len(scaling_df) > 0:
+            colors = ['darkorange', 'dodgerblue', 'deeppink', 'olive', 'teal']
+            markers = ['o', 's', '^', 'D', 'v']
             
-            if len(processing_times) > 0:
-                ax4.hist(processing_times, bins=20, alpha=0.7, edgecolor='black')
-                ax4.axvline(processing_times.mean(), color='red', linestyle='--', 
-                           linewidth=2, label=f'Mean: {processing_times.mean():.2f}s')
-                ax4.set_xlabel('Processing Time (seconds)')
-                ax4.set_ylabel('Frequency')
-                ax4.set_title('Processing Time Distribution')
-                ax4.legend()
-                ax4.grid(True, alpha=0.3)
+            for i, interp_method in enumerate(scaling_df['interpolation'].unique()):
+                method_data = scaling_df[scaling_df['interpolation'] == interp_method]
+                color = colors[i % len(colors)]
+                marker = markers[i % len(markers)]
+                ax4.plot(method_data['scaling_factor'], method_data['avg_max_gradient'], 
+                        marker=marker, linestyle='-', label=interp_method, 
+                        linewidth=2, markersize=8, color=color)
+
+            # Optional: Plot gradient threshold (mean from table)
+            threshold_vals = scaling_df['avg_max_gradient']
+            if 'gradient_threshold' in detailed_df.columns:
+                gradient_thresh = detailed_df['gradient_threshold'].dropna().unique()
+                if len(gradient_thresh) > 0:
+                    ax4.axhline(y=gradient_thresh[0], color='gray', linestyle='--', label='Threshold')
+
+            ax4.set_xlabel('Scaling Factor')
+            ax4.set_ylabel('Avg Max ∇C(f)')
+            ax4.set_title('Gradient Magnitude ∇C(f) vs Scaling Factor')
+            ax4.legend()
+            ax4.grid(True, alpha=0.3)
+            ax4.axvline(x=1.0, color='black', linestyle='--', alpha=0.5)
+
         
         plt.tight_layout()
         plot_path = output_path / 'scaling_analysis_report.png'
@@ -507,6 +521,6 @@ def save_scaling_visualization(filename, p_map, spectrum, prediction_error, dete
     return str(output_path)
 
 
-def run_scaling_test(input_folder, scaling_factors=None, sensitivity='medium', output_folder=None, detector_class=None):
+def run_scaling_test(input_folder, scaling_factors=None, sensitivity='medium', output_folder=None, detector_class=None, create_visualizations=True):
     test_suite = ScalingTestSuite(scaling_factors=scaling_factors)
-    return test_suite.run_scaling_test(input_folder, output_folder, sensitivity, detector_class)
+    return test_suite.run_scaling_test(input_folder, output_folder, sensitivity, detector_class, create_visualizations)

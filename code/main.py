@@ -9,10 +9,10 @@ from kirchner import KirchnerDetector
 from batchProcessor import BatchProcessor, quick_scan
 from scalingTestSuite import ScalingTestSuite
 
-def run_scaling_test(input_folder, scaling_factors=None, sensitivity='medium', output_folder=None):
+def run_scaling_test(input_folder, scaling_factors=None, sensitivity='medium', output_folder=None, create_visualizations=True):
     try:
         test_suite = ScalingTestSuite(scaling_factors=scaling_factors)
-        return test_suite.run_scaling_test(input_folder, output_folder, sensitivity, KirchnerDetector)
+        return test_suite.run_scaling_test(input_folder, output_folder, sensitivity, KirchnerDetector, create_visualizations)
     except Exception as e:
         print(f"Error running scaling test: {e}")
         return None
@@ -52,11 +52,12 @@ def run_demo(sensitivity='medium'):
     print("\n=== Scaling Test ===")
     scaling_output = Path(root_demo_folder) / 'scaling_test'
     try:
-        demo_scaling_factors = [0.7, 0.8, 0.9, 1.2, 1.5, 2.0]
+        demo_scaling_factors = [0.5, 0.6, 0.7, 0.8, 0.9, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0]
         results_scaling = run_scaling_test('img', 
                                          scaling_factors=demo_scaling_factors,
                                          sensitivity=sensitivity,
-                                         output_folder=str(scaling_output))
+                                         output_folder=str(scaling_output),
+                                         create_visualizations=False)
         if results_scaling:
             print(f"✓ Scaling test completed! Results in: {scaling_output}")
             if 'overall_detection_rate' in results_scaling:
