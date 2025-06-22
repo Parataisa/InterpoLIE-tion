@@ -31,14 +31,13 @@ class BatchProcessor:
             
             from kirchner import KirchnerDetector
             
-            print(f"    Running fast detection...")
             detector = KirchnerDetector(sensitivity=self.sensitivity)
             result = detector.detect(str(img_path))
             
             detector_info = detector.get_detector_info()
             
             processing_time = time.time() - start_time
-            print(f"    Detection result: {result['detected']} in {processing_time:.2f}s")
+            print(f"    Result: {'DETECTED' if result['detected'] else 'CLEAN'} ({processing_time:.2f}s)")
 
             base_result = {
                 'file_name': img_path.name,
@@ -63,8 +62,6 @@ class BatchProcessor:
                 
         except Exception as e:
             print(f"ERROR processing {img_path}: {e}")
-            import traceback
-            traceback.print_exc()
             return {
                 'file_name': img_path.name,
                 'detected': None,
@@ -74,7 +71,7 @@ class BatchProcessor:
     def process_batch(self, save_visualizations=True):
         images = self.scan_images()
         
-        print(f"Found {len(images)} images to process with fast detection")
+        print(f"Found {len(images)} images to process")
 
         if not images:
             return pd.DataFrame()
@@ -82,17 +79,11 @@ class BatchProcessor:
         results = []
         start_time = time.time()
 
-        print(f"Running in sequential mode for fast detection...")
         for i, img_path in enumerate(images):
             try:
                 print(f"Processing {i+1}/{len(images)}: {img_path.name}")
                 result = self.process_single(img_path)
                 results.append(result)
-                
-                status = 'DETECTED' if result.get('detected') else 'NOT DETECTED'
-                if 'error' in result:
-                    status = 'ERROR'
-                print(f"    Result: {status}")
                     
             except Exception as e:
                 print(f"ERROR processing {img_path}: {e}")
@@ -133,12 +124,11 @@ class BatchProcessor:
         detected_count = sum(1 for r in results if r.get('detected'))
         error_count = sum(1 for r in results if 'error' in r)
 
-        print(f"\nSUMMARY (Fast Detection):")
+        print(f"\nSUMMARY:")
         print(f"Total: {len(results)}")
         print(f"Detected: {detected_count}")
         print(f"Errors: {error_count}")
         print(f"Time: {total_time:.1f}s")
-        print(f"Avg time per image: {total_time/len(results):.2f}s")
         print(f"Results: {csv_path}")
 
 
@@ -150,14 +140,13 @@ def create_single_visualization(result, vis_folder):
     detected = result['detected']
     
     fig = plt.figure(figsize=(16, 10))
-    gs = fig.add_gridspec(2, 3, height_ratios=[1, 0.6], hspace=0.3, wspace=0.3)
+    gs = fig.add_gridspec(2, 3, height_ratios=[1, 0.5], hspace=0.3, wspace=0.3)
     
-    fig.suptitle(f'{filename} - {"DETECTED" if detected else "NOT DETECTED"}\n'
-                 f'Fast Implementation (Section 5 - Preset Coefficients)',
+    fig.suptitle(f'{filename} - {"DETECTED" if detected else "CLEAN"}',
                  fontsize=14, fontweight='bold',
                  color='red' if detected else 'green', y=0.95)
 
-    # P-map (Equation 21)
+    # P-map
     ax1 = fig.add_subplot(gs[0, 0])
     im1 = ax1.imshow(p_map, cmap='gray', vmin=0, vmax=1)
     ax1.set_title('P-Map (Equation 21)')
@@ -165,7 +154,7 @@ def create_single_visualization(result, vis_folder):
     ax1.set_ylabel('Pixel Row')
     plt.colorbar(im1, ax=ax1, shrink=0.8)
 
-    # Prediction Error (Equation 5)
+    # Prediction Error
     ax2 = fig.add_subplot(gs[0, 1])
     error_range = np.percentile(prediction_error, [5, 95])
     im2 = ax2.imshow(prediction_error, cmap='RdBu_r',
@@ -191,38 +180,46 @@ def create_single_visualization(result, vis_folder):
     ax3.set_ylabel('Normalized Frequency f_y')
     plt.colorbar(im3, ax=ax3, shrink=0.8)
 
-    # Detection Results Table (bottom, spans all columns)
+    # Detection Results Table
     ax_table = fig.add_subplot(gs[1, :])
     ax_table.axis('off')
     
-    headers = ['Detection Method', 'Paper Section', 'Result', 'Details']
-    
+    # Get detection metrics
     from kirchner import KirchnerDetector
     temp_detector = KirchnerDetector()
     peaks = temp_detector.detect_peaks_fast(spectrum)
     gradient_detected, max_gradient = temp_detector.detect_cumulative_periodogram(spectrum)
     peak_detected = len(peaks) >= temp_detector.min_peaks
     
+    # Create clearer table
     table_data = [
-            ['Peak Detection', 
-            'Section 3.4 (T=10)', 
-            "✓ DETECTED" if peak_detected else "○ CLEAN",
-            f"{len(peaks)} peaks found"],
-            
-            ['Cumulative Periodogram', 
-            'Section 5.2.2 (Eq. 24)', 
-            "✓ DETECTED" if gradient_detected else "○ CLEAN",
-            f"δ'={max_gradient:.6f}"]
-        ]
+        ['Peak Detection (Section 3.4)', 
+         f'{len(peaks)} peaks', 
+         f'≥{temp_detector.min_peaks} required',
+         'PASS' if peak_detected else 'NOT DETECTED'],
         
+        ['Gradient Analysis (Section 5.2.2)', 
+         f'{max_gradient:.4f}', 
+         f'>{temp_detector.gradient_threshold:.4f}',
+         'PASS' if gradient_detected else 'NOT DETECTED'],
+         
+        ['Final Decision', 
+         'Peak OR Gradient', 
+         'Either method passes',
+         'DETECTED' if detected else 'NOT DETECTED']
+    ]
+    
+    headers = ['Method', 'Measured Value', 'Threshold', 'Result']
+    
     table = ax_table.table(cellText=table_data, colLabels=headers,
                         cellLoc='center', loc='center',
-                        bbox=[0.1, 0.2, 0.8, 0.6])
+                        bbox=[0.1, 0.2, 0.8, 0.7])
     
     table.auto_set_font_size(False)
     table.set_fontsize(11)
     table.scale(1.0, 2.0)
     
+    # Style the table
     cellDict = table.get_celld()
     n_rows, n_cols = len(table_data) + 1, len(headers)
     
@@ -237,29 +234,19 @@ def create_single_visualization(result, vis_folder):
                     cell.set_facecolor('#e8e8e8')
                     cell.set_text_props(weight='bold', size=11)
                 else:
-                    if j == 2:  # Result column
+                    # Color code results
+                    if j == 3:  # Result column
                         text = table_data[i-1][j]
-                        if "✓ DETECTED" in text:
-                            cell.set_facecolor('#d4edda')  # Light green for detection
-                        elif "○ CLEAN" in text:
-                            cell.set_facecolor('#e7f3ff')  # Light blue for clean
+                        if text in ['PASS', 'DETECTED']:
+                            cell.set_facecolor('#d4edda')  # Light green
+                        elif text in ['NOT DETECTED']:
+                            cell.set_facecolor('#e7f3ff')  # Light blue
                     
                     cell.set_text_props(size=10)
-    
-    ax_table.text(0.5, 0.95, 'Detection Methods (From Kirchner 2008 Paper)', 
-                ha='center', va='top', transform=ax_table.transAxes,
-                fontsize=12, fontweight='bold')
-    
-    overall_status = "RESAMPLING DETECTED" if detected else "IMAGE CLEAN"
-    status_color = 'red' if detected else 'blue'  # Blue for clean
-    ax_table.text(0.5, 0.05, f'Final Result: {overall_status}', 
-                ha='center', va='bottom', transform=ax_table.transAxes,
-                fontsize=12, fontweight='bold', color=status_color,
-                bbox=dict(boxstyle='round,pad=0.3', facecolor='white', edgecolor=status_color))
 
     plt.subplots_adjust(left=0.08, bottom=0.08, right=0.95, top=0.88)
     
-    output_path = vis_folder / f'{filename.split(".")[0]}_fast_analysis.png'
+    output_path = vis_folder / f'{filename.split(".")[0]}_analysis.png'
     fig.savefig(output_path, dpi=120, bbox_inches='tight', facecolor='white')
     plt.close(fig)
 

@@ -1,4 +1,0 @@
-## *Kartoffel-Contest Szenario:*
-Stellen Sie sich vor, wir organisieren einen Online-Kartoffel-Größenwettbewerb, bei dem Hobbygärtner stolz ihre größten Kartoffeln präsentieren. Die Teilnehmer sollen ihre Ernte fotografieren - mit einem Maßband oder Lineal als Größenreferenz - und die Bilder auf unserer Plattform hochladen.  
-Findige Teilnehmer könnten ihre Kartoffeln durch geschickte Skalierung vergrößern, während sie das Maßband proportional verkleinern. Durch solche Resampling-Manipulationen erscheint eine durchschnittliche 200g-Kartoffel plötzlich wie ein 500g-Riese.  
-Das Problem verschärft sich, da die Manipulation so subtil durchgeführt werden kann, dass sie selbst bei genauer Betrachtung nicht auffällt - schließlich stimmen alle Proportionen im Bild. Ohne robuste Resampling-Detektionsverfahren wird aus unserem harmlosen Wettbewerb schnell eine Plattform für digitale Täuschung.
