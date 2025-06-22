@@ -150,7 +150,7 @@ class KirchnerDetector:
         detected = max_grad > self.gradient_threshold
         return detected, max_grad, gradient_magnitude  
 
-    def load_image(self, img_path, downscaling=False):
+    def load_image(self, img_path, downscaling=True):
         try:
             img = np.array(Image.open(img_path).convert('L'))
             # downscale to 256x256

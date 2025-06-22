@@ -26,7 +26,7 @@ class ScalingTestSuite:
             'lanczos': cv2.INTER_LANCZOS4
         }
 
-    def create_scaled_images(self, input_folder, output_folder, downscale_size=256, downscale=False):
+    def create_scaled_images(self, input_folder, output_folder, downscale_size=256, downscale=True):
         input_path = Path(input_folder)
         output_path = Path(output_folder)
         output_path.mkdir(parents=True, exist_ok=True)
@@ -345,7 +345,6 @@ class ScalingTestSuite:
             ax2.set_title('Detection Rate by Image Category')
             ax2.set_ylim(0, 1)
             
-            # Add value labels on bars
             for bar, rate in zip(bars, detection_rates):
                 height = bar.get_height()
                 ax2.text(bar.get_x() + bar.get_width()/2., height + 0.01,
@@ -493,7 +492,6 @@ def save_scaling_visualization(filename, p_map, spectrum, prediction_error, dete
     table.set_fontsize(12)
     table.scale(1.0, 2.0)
     
-    # Style table
     cellDict = table.get_celld()
     n_rows, n_cols = len(table_data) + 1, len(headers)
     
@@ -505,7 +503,7 @@ def save_scaling_visualization(filename, p_map, spectrum, prediction_error, dete
                     cell.set_facecolor('#e8e8e8')
                     cell.set_text_props(weight='bold')
                 else:
-                    if j == 2:  # Status column
+                    if j == 2:
                         text = table_data[i-1][j]
                         if text in ['PASS', 'DETECTED']:
                             cell.set_facecolor('#d4edda')

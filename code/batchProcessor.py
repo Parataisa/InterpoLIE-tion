@@ -9,7 +9,7 @@ import matplotlib
 matplotlib.use('Agg')
 
 class BatchProcessor:
-    def __init__(self, input_folder, output_folder, sensitivity='medium', max_workers=4):
+    def __init__(self, input_folder, output_folder, sensitivity='medium', max_workers=24):
         self.input_folder = Path(input_folder)
         self.output_folder = Path(output_folder)
         self.sensitivity = sensitivity
