@@ -17,7 +17,7 @@ from matplotlib.colors import LogNorm
 
 class ScalingTestSuite:
     def __init__(self, scaling_factors=None, interpolation_methods=None):
-        self.scaling_factors = scaling_factors or [0.5, 0.8, 1.2, 1.5]
+        self.scaling_factors = scaling_factors or [0.5, 0.6, 0.7, 0.8, 0.9, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0]
             
         self.interpolation_methods = {
             'nearest': cv2.INTER_NEAREST,
@@ -26,7 +26,7 @@ class ScalingTestSuite:
             'lanczos': cv2.INTER_LANCZOS4
         }
 
-    def create_scaled_images(self, input_folder, output_folder):
+    def create_scaled_images(self, input_folder, output_folder, downscale_size=256):
         input_path = Path(input_folder)
         output_path = Path(output_folder)
         output_path.mkdir(parents=True, exist_ok=True)
@@ -48,12 +48,12 @@ class ScalingTestSuite:
                     continue
                 
                 h, w = img.shape[:2]
-                max_original_size = 2048
-                if max(h, w) > max_original_size:
-                    scale_down = max_original_size / max(h, w)
-                    new_h, new_w = int(h * scale_down), int(w * scale_down)
-                    img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
-                    h, w = new_h, new_w
+                # downscale image for testing
+                if h > downscale_size or w > downscale_size:
+                    scale_factor = min(downscale_size / h, downscale_size / w)
+                    new_h, new_w = int(h * scale_factor), int(w * scale_factor)
+                    img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
+                    h, w = img.shape[:2]
                     
                 original_name = img_path.stem
                 original_ext = img_path.suffix
@@ -71,14 +71,11 @@ class ScalingTestSuite:
                     'interpolation': 'original',
                     'category': 'original'
                 })
-                
+
                 # Create scaled versions
                 for scale_factor in self.scaling_factors:
                     for interp_name, interp_method in self.interpolation_methods.items():
                         new_h, new_w = int(h * scale_factor), int(w * scale_factor)
-                        if new_h < 32 or new_w < 32 or new_h > 4096 or new_w > 4096:
-                            continue
-                            
                         try:
                             scaled_img = cv2.resize(img, (new_w, new_h), interpolation=interp_method)
                             

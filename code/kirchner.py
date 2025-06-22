@@ -7,7 +7,6 @@ Key Implementation:
 - Section 5.1: Fast computation with preset coefficients (Equation 25)
 - Section 5.2.2: Cumulative periodogram detection (Equation 24)
 - Equation 21: P-map formula p = lambda * exp(-|e|^tau / sigma)
-- Section 3.4: Peak detection with T=10 threshold
 """
 import numpy as np
 import cv2
@@ -100,7 +99,7 @@ class KirchnerDetector:
         """P-map generation using Equation 21."""
         abs_error = np.abs(prediction_error)
         # Clip to avoid overflow
-        # abs_error = np.clip(abs_error, 0, 10)
+        abs_error = np.clip(abs_error, 0, 10)
         p_map = self.lambda_param * np.exp(-(abs_error ** self.tau) / self.sigma)
         return p_map
 
@@ -257,6 +256,10 @@ class KirchnerDetector:
         try:
             img = np.array(Image.open(img_path).convert('L'))
             img = img.astype(np.float64)
+
+            # downscale to 256x256
+            if img.shape[0] > 256 or img.shape[1] > 256:
+                img = cv2.resize(img, (256, 256), interpolation=cv2.INTER_NEAREST)
             return img
         except Exception as e:
             print(f"Error loading image {img_path}: {e}")

@@ -17,9 +17,8 @@ def run_scaling_test(input_folder, scaling_factors=None, sensitivity='medium', o
         print(f"Error running scaling test: {e}")
         return None
 
-def run_demo():
+def run_demo(sensitivity='medium'):
     if not os.path.exists('img'):
-        print("No 'img' folder found for demo")
         print("Please create an 'img' folder with test images")
         return None
         
@@ -39,7 +38,7 @@ def run_demo():
     print("\n=== Batch Processing ===")
     output_folder_batch = Path(root_demo_folder) / 'batch_results'
     try:
-        results_batch = quick_scan('img', str(output_folder_batch), sensitivity='medium')
+        results_batch = quick_scan('img', str(output_folder_batch), sensitivity=sensitivity)
         print(f"✓ Batch processing completed! Results in: {output_folder_batch}")
         if not results_batch.empty:
             detected = results_batch['detected'].sum()
@@ -56,7 +55,7 @@ def run_demo():
         demo_scaling_factors = [0.7, 0.8, 0.9, 1.2, 1.5, 2.0]
         results_scaling = run_scaling_test('img', 
                                          scaling_factors=demo_scaling_factors,
-                                         sensitivity='medium',
+                                         sensitivity=sensitivity,
                                          output_folder=str(scaling_output))
         if results_scaling:
             print(f"✓ Scaling test completed! Results in: {scaling_output}")
@@ -74,7 +73,7 @@ def run_demo():
     return root_demo_folder
 
 def main():
-    run_demo()
+    run_demo(sensitivity='medium')
     
 if __name__ == "__main__":
     try:

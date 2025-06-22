@@ -9,7 +9,7 @@ import matplotlib
 matplotlib.use('Agg')
 
 class BatchProcessor:
-    def __init__(self, input_folder, output_folder, sensitivity='medium', max_workers=16):
+    def __init__(self, input_folder, output_folder, sensitivity='medium', max_workers=4):
         self.input_folder = Path(input_folder)
         self.output_folder = Path(output_folder)
         self.sensitivity = sensitivity
@@ -247,7 +247,7 @@ def create_single_visualization(result, vis_folder):
     plt.subplots_adjust(left=0.08, bottom=0.08, right=0.95, top=0.88)
     
     output_path = vis_folder / f'{filename.split(".")[0]}_analysis.png'
-    fig.savefig(output_path, dpi=120, bbox_inches='tight', facecolor='white')
+    fig.savefig(output_path, bbox_inches='tight', facecolor='white')
     plt.close(fig)
 
 
