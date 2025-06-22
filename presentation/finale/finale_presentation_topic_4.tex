@@ -5,6 +5,7 @@
 \usepackage{algorithm}
 \usepackage{algpseudocode}
 
+
 \definecolor{green}{RGB}{0,220,0}
 \definecolor{orange}{RGB}{240,220,0}
 \definecolor{blue}{RGB}{0,0,255}
@@ -89,6 +90,44 @@
 
 
 \subsection{Kirchner's Fast Detection Method}
+
+\begin{frame}
+	\frametitle{Interpolations-Methoden: Einfache Algorithmen}
+	
+	\begin{columns}[T]
+		\begin{column}{0.48\textwidth}
+			\includegraphics[width=\textwidth]{images/nearest_mechanism.png}
+			\textcolor{blue}{\small Blockige Kanten, keine Glättung}\footnote{\tiny Bild mit Hilfe von KI erstellt}
+		\end{column}
+		\begin{column}{0.48\textwidth}
+			\includegraphics[width=\textwidth]{images/bilinear_mechanism.png}
+			\textcolor{blue}{\small Glatte Übergänge, leichte Unschärfe}\footnote{\tiny Bild mit Hilfe von KI erstellt}
+		\end{column}
+	\end{columns}
+	
+	\begin{alertblock}{Detektierbarkeit}
+		\textcolor{green}{\textbf{Einfach zu detektieren}} - erzeugen starke periodische Muster
+	\end{alertblock}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Interpolations-Methoden: Fortg. Algorithmen}
+	
+	\begin{columns}[T]
+		\begin{column}{0.48\textwidth}
+			\includegraphics[width=\textwidth]{images/bicubic_mechanism.png}
+			\textcolor{blue}{\small Sehr glatt, hochwertige Qualität}\footnote{\tiny Bild mit Hilfe von KI erstellt}
+		\end{column}
+		\begin{column}{0.48\textwidth}
+			\includegraphics[width=\textwidth]{images/lanczos_mechanism.png}
+			\textcolor{blue}{\small Schärfste Details, komplexer Algorithmus}\footnote{\tiny Bild mit Hilfe von KI erstellt}
+		\end{column}
+	\end{columns}
+	
+	\begin{alertblock}{Detektierbarkeit}
+		\textcolor{orange}{\textbf{Schwieriger zu detektieren}} - subtilere periodische Muster
+	\end{alertblock}
+\end{frame}
 
 \begin{frame}
 	\frametitle{Das "Rezept": Kirchner's Fast Detection (2008)}

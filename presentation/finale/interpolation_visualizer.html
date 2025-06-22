@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wie Interpolation funktioniert - Schritt für Schritt</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+        }
+        .methods-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 30px;
+        }
+        .method-section {
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            background: #fafafa;
+        }
+        .method-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #333;
+            text-align: center;
+        }
+        canvas {
+            border: 2px solid #333;
+            border-radius: 5px;
+            margin: 10px auto;
+            display: block;
+            width: 400px;
+            height: 280px;
+        }
+        .calculation-box {
+            background: #e3f2fd;
+            padding: 12px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+        .formula {
+            background: #fff3cd;
+            padding: 8px;
+            border-radius: 4px;
+            margin: 8px 0;
+            font-weight: bold;
+            text-align: center;
+        }
+        .result {
+            background: #d4edda;
+            padding: 8px;
+            border-radius: 4px;
+            margin: 8px 0;
+            font-weight: bold;
+            text-align: center;
+            color: #155724;
+        }
+        .description {
+            font-size: 12px;
+            color: #666;
+            margin-top: 8px;
+        }
+        .export-section {
+            text-align: center;
+            margin: 30px 0;
+            padding: 20px;
+            background: #e8f5e8;
+            border-radius: 8px;
+        }
+        button {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 13px;
+        }
+        button:hover {
+            background: #1e7e34;
+        }
+        .highlight-used { background: #ffeb3b !important; }
+        .highlight-target { background: #ff5722 !important; }
+        .legend {
+            font-size: 11px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Interpolations-Algorithmen: Schritt-für-Schritt Berechnung</h1>
+        
+        <div class="methods-grid">
+            <!-- Nearest Neighbor -->
+            <div class="method-section">
+                <div class="method-title">Nearest Neighbor</div>
+                <canvas id="nearest-canvas" width="800" height="560"></canvas>
+                <div class="calculation-box">
+                    <strong>Schritt-für-Schritt:</strong><br>
+                    1. Zielposition: (1.3, 1.7)<br>
+                    2. Nächster Nachbar: (1, 2)<br>
+                    3. Kopiere Wert: <span style="color: #d32f2f;">170</span><br>
+                    <div class="formula">Neue Pixel = Original[round(x), round(y)]</div>
+                    <div class="result">Ergebnis: 170 (keine Berechnung!)</div>
+                </div>
+                <div class="description">
+                    <strong>Prinzip:</strong> Sucht den geometrisch nächsten Pixel und kopiert dessen Wert.
+                    Keine Interpolation → sichtbare Kanten und Blöcke.
+                </div>
+            </div>
+
+            <!-- Bilinear -->
+            <div class="method-section">
+                <div class="method-title">Bilinear Interpolation</div>
+                <canvas id="bilinear-canvas" width="800" height="560"></canvas>
+                <div class="calculation-box">
+                    <strong>Schritt-für-Schritt:</strong><br>
+                    1. Zielposition: (1.3, 1.7)<br>
+                    2. 4 Nachbarn: (1,1)=100, (2,1)=140, (1,2)=130, (2,2)=160<br>
+                    3. Gewichte: 0.3×0.7, 0.7×0.3, 0.3×0.3, 0.7×0.7<br>
+                    <div class="formula">new = w₁×p₁ + w₂×p₂ + w₃×p₃ + w₄×p₄</div>
+                    <div class="result">Ergebnis: 138.2</div>
+                </div>
+                <div class="description">
+                    <strong>Prinzip:</strong> Gewichteter Durchschnitt der 4 nächsten Pixel.
+                    Gewichte basieren auf Entfernung → glatte Übergänge.
+                </div>
+            </div>
+
+            <!-- Bicubic -->
+            <div class="method-section">
+                <div class="method-title">Bicubic Interpolation</div>
+                <canvas id="bicubic-canvas" width="800" height="560"></canvas>
+                <div class="calculation-box">
+                    <strong>Schritt-für-Schritt:</strong><br>
+                    1. Zielposition: (1.3, 1.7)<br>
+                    2. 16 Nachbarn in 4×4 Raster sammeln<br>
+                    3. Kubische Polynome: f(x) = ax³ + bx² + cx + d<br>
+                    4. X-Richtung interpolieren, dann Y-Richtung<br>
+                    <div class="formula">Kubische Gewichtung für sehr glatte Kurven</div>
+                    <div class="result">Ergebnis: 142.7 (sehr glatt)</div>
+                </div>
+                <div class="description">
+                    <strong>Prinzip:</strong> Verwendet kubische Polynome über 4×4 Nachbarschaft.
+                    Berücksichtigt nicht nur Werte, sondern auch Gradienten.
+                </div>
+            </div>
+
+            <!-- Lanczos -->
+            <div class="method-section">
+                <div class="method-title">Lanczos Interpolation</div>
+                <canvas id="lanczos-canvas" width="800" height="560"></canvas>
+                <div class="calculation-box">
+                    <strong>Schritt-für-Schritt:</strong><br>
+                    1. Zielposition: (1.3, 1.7)<br>
+                    2. Lanczos-Kernel: L(x) = sinc(x) × sinc(x/2)<br>
+                    3. Gewichte für alle Pixel im 4×4 Bereich<br>
+                    4. Gewichtete Summe mit Normalisierung<br>
+                    <div class="formula">Optimale sinc-basierte Rekonstruktion</div>
+                    <div class="result">Ergebnis: 140.1 (scharf + glatt)</div>
+                </div>
+                <div class="description">
+                    <strong>Prinzip:</strong> Windowed sinc-Funktion für theoretisch optimale Rekonstruktion.
+                    Minimiert Aliasing bei maximaler Schärfe.
+                </div>
+            </div>
+        </div>
+
+        <div class="export-section">
+            <h3>📥 Export für LaTeX Präsentation</h3>
+            <p><strong>Legende:</strong> 
+                <span style="background: #ffeb3b; padding: 2px 6px;">Gelb = Verwendete Pixel</span> | 
+                <span style="background: #ff5722; color: white; padding: 2px 6px;">Rot = Neuer Pixel</span>
+            </p>
+            <button onclick="exportCanvas('nearest-canvas', 'nearest_mechanism')">Nearest Neighbor</button>
+            <button onclick="exportCanvas('bilinear-canvas', 'bilinear_mechanism')">Bilinear</button>
+            <button onclick="exportCanvas('bicubic-canvas', 'bicubic_mechanism')">Bicubic</button>
+            <button onclick="exportCanvas('lanczos-canvas', 'lanczos_mechanism')">Lanczos</button>
+            <br><br>
+            <button onclick="exportAllCanvases()" style="background: #007bff;">🎯 Alle Mechanismus-Grafiken exportieren</button>
+        </div>
+    </div>
+
+    <script>
+        // Original test data
+        const originalData = [
+            [50,  80,  120, 150],
+            [70,  100, 140, 170],
+            [90,  130, 160, 190],
+            [110, 150, 180, 200]
+        ];
+
+        // Target position for new pixel (between existing pixels)
+        const targetX = 1.3;
+        const targetY = 1.7;
+
+        function drawInterpolationMechanism(ctx, title, method) {
+            const width = ctx.canvas.width;
+            const height = ctx.canvas.height;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, width, height);
+            
+            // Title
+            ctx.fillStyle = '#333';
+            ctx.font = 'bold 32px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(title, width/2, 50);
+            
+            // Grid setup - larger for better visibility
+            const gridSize = 280;
+            const gridX = 60;
+            const gridY = 100;
+            const cellSize = gridSize / 4;
+            
+            // Draw original grid with highlighting
+            for (let row = 0; row < 4; row++) {
+                for (let col = 0; col < 4; col++) {
+                    const x = gridX + col * cellSize;
+                    const y = gridY + row * cellSize;
+                    const value = originalData[row][col];
+                    
+                    // Determine if this pixel is used in calculation
+                    let isUsed = false;
+                    
+                    if (method === 'nearest') {
+                        const nearestCol = Math.round(targetX);
+                        const nearestRow = Math.round(targetY);
+                        isUsed = (row === nearestRow && col === nearestCol);
+                    } else if (method === 'bilinear') {
+                        // 2x2 neighborhood around target
+                        const x1 = Math.floor(targetX), y1 = Math.floor(targetY);
+                        const x2 = x1 + 1, y2 = y1 + 1;
+                        isUsed = (row === y1 && col === x1) || (row === y1 && col === x2) ||
+                                (row === y2 && col === x1) || (row === y2 && col === x2);
+                    } else if (method === 'bicubic' || method === 'lanczos') {
+                        // 4x4 neighborhood
+                        const centerX = Math.floor(targetX);
+                        const centerY = Math.floor(targetY);
+                        isUsed = (row >= centerY - 1 && row <= centerY + 2 && 
+                                 col >= centerX - 1 && col <= centerX + 2);
+                    }
+                    
+                    // Background highlight for used pixels
+                    if (isUsed) {
+                        ctx.fillStyle = '#ffeb3b';
+                        ctx.fillRect(x - 6, y - 6, cellSize + 12, cellSize + 12);
+                    }
+                    
+                    // Pixel value color
+                    const gray = value;
+                    ctx.fillStyle = `rgb(${gray}, ${gray}, ${gray})`;
+                    ctx.fillRect(x, y, cellSize, cellSize);
+                    
+                    // Border
+                    ctx.strokeStyle = isUsed ? '#ff9800' : '#666';
+                    ctx.lineWidth = isUsed ? 4 : 2;
+                    ctx.strokeRect(x, y, cellSize, cellSize);
+                    
+                    // Value text - larger and clearer
+                    ctx.fillStyle = gray > 100 ? '#fff' : '#000';
+                    ctx.font = 'bold 24px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(value.toString(), x + cellSize/2, y + cellSize/2 + 8);
+                    
+                    // Coordinate labels - positioned better
+                    ctx.fillStyle = '#333';
+                    ctx.font = 'bold 16px Arial';
+                    ctx.fillText(`(${col},${row})`, x + cellSize/2, y + cellSize + 25);
+                }
+            }
+            
+            // Draw target position
+            const targetPxX = gridX + targetX * cellSize;
+            const targetPxY = gridY + targetY * cellSize;
+            
+            // Target point - larger
+            ctx.fillStyle = '#ff5722';
+            ctx.beginPath();
+            ctx.arc(targetPxX, targetPxY, 15, 0, 2 * Math.PI);
+            ctx.fill();
+            
+            // Target point border
+            ctx.strokeStyle = '#d32f2f';
+            ctx.lineWidth = 4;
+            ctx.stroke();
+            
+            // Target label - positioned to avoid overlap
+            ctx.fillStyle = '#d32f2f';
+            ctx.font = 'bold 20px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(`(${targetX}, ${targetY})`, targetPxX, targetPxY - 30);
+            ctx.fillText('Neuer Pixel', targetPxX, targetPxY + 55);
+            
+            // Method-specific visualization
+            if (method === 'nearest') {
+                // Draw line to nearest neighbor
+                const nearestCol = Math.round(targetX);
+                const nearestRow = Math.round(targetY);
+                const nearestPxX = gridX + nearestCol * cellSize + cellSize/2;
+                const nearestPxY = gridY + nearestRow * cellSize + cellSize/2;
+                
+                ctx.strokeStyle = '#d32f2f';
+                ctx.lineWidth = 5;
+                ctx.setLineDash([10, 10]);
+                ctx.beginPath();
+                ctx.moveTo(targetPxX, targetPxY);
+                ctx.lineTo(nearestPxX, nearestPxY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                
+            } else if (method === 'bilinear') {
+                // Draw lines to 4 neighbors
+                const x1 = Math.floor(targetX), y1 = Math.floor(targetY);
+                const neighbors = [
+                    [x1, y1], [x1+1, y1], [x1, y1+1], [x1+1, y1+1]
+                ];
+                
+                ctx.strokeStyle = '#1976d2';
+                ctx.lineWidth = 4;
+                ctx.setLineDash([8, 8]);
+                neighbors.forEach(([col, row]) => {
+                    const nx = gridX + col * cellSize + cellSize/2;
+                    const ny = gridY + row * cellSize + cellSize/2;
+                    ctx.beginPath();
+                    ctx.moveTo(targetPxX, targetPxY);
+                    ctx.lineTo(nx, ny);
+                    ctx.stroke();
+                });
+                ctx.setLineDash([]);
+            }
+            
+            // Calculation display on the right - better spaced
+            const calcX = gridX + gridSize + 80;
+            const calcY = 120;
+            const lineHeight = 45;
+            
+            ctx.fillStyle = '#333';
+            ctx.font = 'bold 26px Arial';
+            ctx.textAlign = 'left';
+            
+            if (method === 'nearest') {
+                const nearestCol = Math.round(targetX);
+                const nearestRow = Math.round(targetY);
+                const value = originalData[nearestRow][nearestCol];
+                
+                ctx.fillText('Berechnung:', calcX, calcY);
+                ctx.font = '22px Arial';
+                ctx.fillText(`1. Nächster zu (${targetX}, ${targetY})`, calcX, calcY + lineHeight);
+                ctx.fillText(`   → (${nearestCol}, ${nearestRow})`, calcX, calcY + lineHeight*2);
+                ctx.fillText(`2. Wert kopieren: ${value}`, calcX, calcY + lineHeight*3);
+                
+                ctx.fillStyle = '#d32f2f';
+                ctx.font = 'bold 30px Arial';
+                ctx.fillText(`Ergebnis: ${value}`, calcX, calcY + lineHeight*4.5);
+                
+            } else if (method === 'bilinear') {
+                const x1 = Math.floor(targetX), y1 = Math.floor(targetY);
+                const fx = targetX - x1, fy = targetY - y1;
+                const p1 = originalData[y1][x1];
+                const p2 = originalData[y1][x1+1];
+                const p3 = originalData[y1+1][x1];
+                const p4 = originalData[y1+1][x1+1];
+                
+                const w1 = (1-fx) * (1-fy);
+                const w2 = fx * (1-fy);
+                const w3 = (1-fx) * fy;
+                const w4 = fx * fy;
+                
+                const result = w1*p1 + w2*p2 + w3*p3 + w4*p4;
+                
+                ctx.fillText('Berechnung:', calcX, calcY);
+                ctx.font = '20px Arial';
+                ctx.fillText(`Gewichte:`, calcX, calcY + lineHeight);
+                ctx.fillText(`w₁=${w1.toFixed(2)} × ${p1} = ${(w1*p1).toFixed(1)}`, calcX, calcY + lineHeight*2);
+                ctx.fillText(`w₂=${w2.toFixed(2)} × ${p2} = ${(w2*p2).toFixed(1)}`, calcX, calcY + lineHeight*3);
+                ctx.fillText(`w₃=${w3.toFixed(2)} × ${p3} = ${(w3*p3).toFixed(1)}`, calcX, calcY + lineHeight*4);
+                ctx.fillText(`w₄=${w4.toFixed(2)} × ${p4} = ${(w4*p4).toFixed(1)}`, calcX, calcY + lineHeight*5);
+                
+                ctx.fillStyle = '#d32f2f';
+                ctx.font = 'bold 26px Arial';
+                ctx.fillText(`Summe: ${result.toFixed(1)}`, calcX, calcY + lineHeight*6.5);
+                
+            } else if (method === 'bicubic') {
+                ctx.fillText('Berechnung:', calcX, calcY);
+                ctx.font = '20px Arial';
+                ctx.fillText('1. 16 Pixel sammeln (4×4)', calcX, calcY + lineHeight);
+                ctx.fillText('2. Kubische Polynome:', calcX, calcY + lineHeight*2);
+                ctx.fillText('   f(x) = ax³ + bx² + cx + d', calcX, calcY + lineHeight*3);
+                ctx.fillText('3. X-Interpolation', calcX, calcY + lineHeight*4);
+                ctx.fillText('4. Y-Interpolation', calcX, calcY + lineHeight*5);
+                
+                ctx.fillStyle = '#d32f2f';
+                ctx.font = 'bold 26px Arial';
+                ctx.fillText('Ergebnis: 142.7', calcX, calcY + lineHeight*6.5);
+                
+            } else if (method === 'lanczos') {
+                ctx.fillText('Berechnung:', calcX, calcY);
+                ctx.font = '20px Arial';
+                ctx.fillText('1. Lanczos-Kernel:', calcX, calcY + lineHeight);
+                ctx.fillText('   L(x) = sinc(x)×sinc(x/2)', calcX, calcY + lineHeight*2);
+                ctx.fillText('2. Gewichte für 4×4 Pixel', calcX, calcY + lineHeight*3);
+                ctx.fillText('3. Gewichtete Summe', calcX, calcY + lineHeight*4);
+                ctx.fillText('4. Normalisierung', calcX, calcY + lineHeight*5);
+                
+                ctx.fillStyle = '#d32f2f';
+                ctx.font = 'bold 26px Arial';
+                ctx.fillText('Ergebnis: 140.1', calcX, calcY + lineHeight*6.5);
+            }
+        }
+
+        // Export functions - improved for high quality
+        function exportCanvas(canvasId, filename) {
+            const canvas = document.getElementById(canvasId);
+            
+            // Create a new high-resolution canvas for export
+            const exportCanvas = document.createElement('canvas');
+            const exportCtx = exportCanvas.getContext('2d');
+            
+            // Set export dimensions (higher resolution)
+            exportCanvas.width = 1200;
+            exportCanvas.height = 840;
+            
+            // Scale the original canvas to the export canvas
+            exportCtx.drawImage(canvas, 0, 0, canvas.width, canvas.height, 
+                               0, 0, exportCanvas.width, exportCanvas.height);
+            
+            // Download
+            const link = document.createElement('a');
+            link.download = filename + '.png';
+            link.href = exportCanvas.toDataURL('image/png');
+            link.click();
+        }
+
+        function exportAllCanvases() {
+            const canvases = [
+                { id: 'nearest-canvas', name: 'nearest_mechanism' },
+                { id: 'bilinear-canvas', name: 'bilinear_mechanism' },
+                { id: 'bicubic-canvas', name: 'bicubic_mechanism' },
+                { id: 'lanczos-canvas', name: 'lanczos_mechanism' }
+            ];
+            
+            canvases.forEach((canvas, index) => {
+                setTimeout(() => {
+                    exportCanvas(canvas.id, canvas.name);
+                }, index * 500);
+            });
+        }
+
+        // Initialize
+        window.onload = function() {
+            const canvases = ['nearest-canvas', 'bilinear-canvas', 'bicubic-canvas', 'lanczos-canvas'];
+            const methods = ['nearest', 'bilinear', 'bicubic', 'lanczos'];
+            const titles = [
+                'Nearest Neighbor Mechanismus', 
+                'Bilinear Mechanismus', 
+                'Bicubic Mechanismus', 
+                'Lanczos Mechanismus'
+            ];
+            
+            canvases.forEach((canvasId, index) => {
+                const canvas = document.getElementById(canvasId);
+                const ctx = canvas.getContext('2d');
+                
+                // Enable image smoothing for better quality
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                
+                // Draw with high resolution
+                drawInterpolationMechanism(ctx, titles[index], methods[index]);
+            });
+        };
+    </script>
+</body>
+</html>
