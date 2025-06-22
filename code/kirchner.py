@@ -66,7 +66,7 @@ class KirchnerDetector:
         print(f"        Step 1: Input preparation")
         if len(image.shape) == 3:
             image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        image = image.astype(np.float64)
+        image = image.astype(np.float32)
         
         # Apply preset linear predictor
         print(f"        Step 2: Linear prediction")
@@ -105,7 +105,7 @@ class KirchnerDetector:
 
     def compute_spectrum_simple(self, p_map):
         # Contrast function Γ: subtract local mean
-        kernel = np.ones((5, 5), dtype=np.float64) / 25
+        kernel = np.ones((5, 5), dtype=np.float32) / 25
         local_mean = convolve(p_map, kernel, mode='reflect')
         contrast_p_map = p_map - local_mean
         
@@ -150,13 +150,11 @@ class KirchnerDetector:
         detected = max_grad > self.gradient_threshold
         return detected, max_grad, gradient_magnitude  
 
-    def load_image(self, img_path):
+    def load_image(self, img_path, downscaling=False):
         try:
             img = np.array(Image.open(img_path).convert('L'))
-            img = img.astype(np.float64)
-
             # downscale to 256x256
-            if img.shape[0] > 256 or img.shape[1] > 256:
+            if (img.shape[0] > 256 or img.shape[1] > 256) and downscaling:
                 img = cv2.resize(img, (256, 256), interpolation=cv2.INTER_NEAREST)
             return img
         except Exception as e:

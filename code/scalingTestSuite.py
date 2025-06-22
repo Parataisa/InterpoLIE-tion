@@ -26,7 +26,7 @@ class ScalingTestSuite:
             'lanczos': cv2.INTER_LANCZOS4
         }
 
-    def create_scaled_images(self, input_folder, output_folder, downscale_size=256):
+    def create_scaled_images(self, input_folder, output_folder, downscale_size=256, downscale=False):
         input_path = Path(input_folder)
         output_path = Path(output_folder)
         output_path.mkdir(parents=True, exist_ok=True)
@@ -49,7 +49,7 @@ class ScalingTestSuite:
                 
                 h, w = img.shape[:2]
                 # downscale image for testing
-                if h > downscale_size or w > downscale_size:
+                if (h > downscale_size or w > downscale_size) and downscale:
                     scale_factor = min(downscale_size / h, downscale_size / w)
                     new_h, new_w = int(h * scale_factor), int(w * scale_factor)
                     img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
@@ -128,7 +128,6 @@ class ScalingTestSuite:
             }
 
     def run_scaling_test(self, input_folder, output_folder=None, sensitivity='medium', detector_class=None, create_visualizations=True):
-        """Run complete scaling test suite."""
         if output_folder is None:
             timestamp = time.strftime('%Y%m%d_%H%M%S')
             output_folder = f'scaling_test_{timestamp}'
