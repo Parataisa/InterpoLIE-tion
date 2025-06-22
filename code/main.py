@@ -9,6 +9,8 @@ from kirchner import KirchnerDetector
 from batchProcessor import BatchProcessor, quick_scan
 from scalingTestSuite import ScalingTestSuite
 
+IMAGE_FOLDER_PATH = 'img'
+
 def run_scaling_test(input_folder, scaling_factors=None, sensitivity='medium', output_folder=None, create_visualizations=True):
     try:
         test_suite = ScalingTestSuite(scaling_factors=scaling_factors)
@@ -18,8 +20,8 @@ def run_scaling_test(input_folder, scaling_factors=None, sensitivity='medium', o
         return None
 
 def run_demo(sensitivity='medium'):
-    if not os.path.exists('img'):
-        print("Please create an 'img' folder with test images")
+    if not os.path.exists(IMAGE_FOLDER_PATH):
+        print(f"Error: Image folder '{IMAGE_FOLDER_PATH}' not found.")
         return None
         
     print("Running Kirchner Fast Resampling Detector Demo")
@@ -38,7 +40,7 @@ def run_demo(sensitivity='medium'):
     print("\n=== Batch Processing ===")
     output_folder_batch = Path(root_demo_folder) / 'batch_results'
     try:
-        results_batch = quick_scan('img', str(output_folder_batch), sensitivity=sensitivity)
+        results_batch = quick_scan(IMAGE_FOLDER_PATH, str(output_folder_batch), sensitivity=sensitivity)
         print(f"✓ Batch processing completed! Results in: {output_folder_batch}")
         if not results_batch.empty:
             detected = results_batch['detected'].sum()
@@ -53,7 +55,7 @@ def run_demo(sensitivity='medium'):
     scaling_output = Path(root_demo_folder) / 'scaling_test'
     try:
         demo_scaling_factors = [0.5, 0.6, 0.7, 0.8, 0.9, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0]
-        results_scaling = run_scaling_test('img', 
+        results_scaling = run_scaling_test(IMAGE_FOLDER_PATH, 
                                          scaling_factors=demo_scaling_factors,
                                          sensitivity=sensitivity,
                                          output_folder=str(scaling_output),
