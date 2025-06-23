@@ -12,12 +12,12 @@ import numpy as np
 import cv2
 from scipy.fft import fft2, fftshift
 from scipy.ndimage import convolve
-from PIL import Image
 from pathlib import Path
+from fileHandler import FileHandler
 
 
 class KirchnerDetector:
-    def __init__(self, sensitivity='medium', lambda_param=1.0, tau=2.0, sigma=1.0):
+    def __init__(self, sensitivity='medium', lambda_param=1.0, tau=2.0, sigma=1.0, downscale_size=512, downscale=True):
         # Preset filter coefficients from Equation 25
         self.predictor_filter = np.array([
             [-0.25, 0.50, -0.25],
@@ -29,6 +29,9 @@ class KirchnerDetector:
         self.lambda_param = lambda_param
         self.tau = tau  
         self.sigma = sigma
+
+        # Initialize file handler
+        self.file_handler = FileHandler(downscale_size, downscale)
         
         sensitivity_params = {
             'low':    {'gradient_threshold': 0.0040}, 
@@ -43,7 +46,7 @@ class KirchnerDetector:
     def detect(self, img_path):
         try:
             print(f"      Loading image: {Path(img_path).name}")
-            image = self.load_image(img_path)
+            image = self.file_handler.load_image(img_path)
             print(f"      Image loaded, size: {image.shape}")
             
             print(f"      Running Kirchner detection...")
@@ -149,17 +152,6 @@ class KirchnerDetector:
 
         detected = max_grad > self.gradient_threshold
         return detected, max_grad, gradient_magnitude  
-
-    def load_image(self, img_path, downscaling=True):
-        try:
-            img = np.array(Image.open(img_path).convert('L'))
-            # downscale to 256x256
-            if (img.shape[0] > 512 or img.shape[1] > 512) and downscaling:
-                img = cv2.resize(img, (512, 512), interpolation=cv2.INTER_NEAREST)
-            return img
-        except Exception as e:
-            print(f"Error loading image {img_path}: {e}")
-            raise
 
     def extract_detection_metrics(self, spectrum):
         gradient_detected, max_gradient, gradient_map = self.detect_cumulative_periodogram(spectrum)

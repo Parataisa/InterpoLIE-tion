@@ -8,23 +8,22 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from matplotlib.colors import LogNorm
 from visualizations import create_batch_visualization
+from fileHandler import FileHandler
 matplotlib.use('Agg')
 
 class BatchProcessor:
-    def __init__(self, input_folder, output_folder, sensitivity='medium', max_workers=24):
+    def __init__(self, input_folder, output_folder, sensitivity='medium', max_workers=24, 
+                 downscale_size=512, downscale=True):
         self.input_folder = Path(input_folder)
         self.output_folder = Path(output_folder)
         self.sensitivity = sensitivity
         self.max_workers = max_workers 
-        self.supported_formats = {'.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp', '.webp'}
-        self.output_folder.mkdir(parents=True, exist_ok=True)
+        
+        self.file_handler = FileHandler(downscale_size, downscale)
+        self.file_handler.create_output_folder(self.output_folder)
 
     def scan_images(self):
-        images = []
-        for file_path in self.input_folder.rglob('*'):
-            if file_path.is_file() and file_path.suffix.lower() in self.supported_formats:
-                images.append(file_path)
-        return images
+        return self.file_handler.scan_folder(self.input_folder)
 
     def process_single(self, img_path):
         try:
@@ -33,7 +32,9 @@ class BatchProcessor:
             
             from kirchner import KirchnerDetector
             
-            detector = KirchnerDetector(sensitivity=self.sensitivity)
+            detector = KirchnerDetector(sensitivity=self.sensitivity, 
+                                        downscale_size=self.file_handler.downscale_size, 
+                                        downscale=self.file_handler.downscale)
             result = detector.detect(str(img_path))
             
             detailed_metrics = detector.extract_detection_metrics(result['spectrum'])
@@ -75,7 +76,7 @@ class BatchProcessor:
                 'error': str(e)
             }
 
-    def process_batch(self, save_visualizations=True, create_analysis_report=True):
+    def process_batch(self, save_visualizations=True):
         images = self.scan_images()
         
         print(f"Found {len(images)} images to process")
@@ -109,18 +110,18 @@ class BatchProcessor:
         self.create_batch_analysis_report(results)
 
         total_time = time.time() - start_time
-        self._print_summary(results, total_time, csv_path)
+        self.print_summary(results, total_time, csv_path)
         return df
 
     def save_results_csv(self, df):
         timestamp = time.strftime('%Y%m%d_%H%M%S')
-        csv_path = self.output_folder / f'results_fast_{timestamp}.csv'
+        csv_path = self.output_folder / f'results.csv'
         df.to_csv(csv_path, index=False)
         return csv_path
 
     def create_visualizations(self, results):
         vis_folder = self.output_folder / 'visualizations'
-        vis_folder.mkdir(exist_ok=True)
+        self.file_handler.create_output_folder(vis_folder)
 
         for result in results:
             if 'error' not in result and 'p_map' in result and result['p_map'] is not None:
@@ -359,27 +360,26 @@ class BatchProcessor:
         
         plt.tight_layout()
         plt.subplots_adjust(top=0.94) 
-        plot_path = self.output_folder / 'enhanced_batch_analysis_report.png'
+        plot_path = self.output_folder / 'batch_analysis_report.png'
         plt.savefig(plot_path, bbox_inches='tight', facecolor='white', dpi=300)
         plt.close()
-        print(f"Enhanced batch analysis report saved: {plot_path}")
         
-        def _print_summary(self, results, total_time, csv_path):
-            detected_count = sum(1 for r in results if r.get('detected'))
-            error_count = sum(1 for r in results if 'error' in r)
+    def print_summary(self, results, total_time, csv_path):
+        detected_count = sum(1 for r in results if r.get('detected'))
+        error_count = sum(1 for r in results if 'error' in r)
 
-            print(f"\nSUMMARY:")
-            print(f"Total: {len(results)}")
-            print(f"Detected: {detected_count}")
-            print(f"Errors: {error_count}")
-            print(f"Time: {total_time:.1f}s")
-            print(f"Results: {csv_path}")
+        print(f"\nSUMMARY:")
+        print(f"Total: {len(results)}")
+        print(f"Detected: {detected_count}")
+        print(f"Errors: {error_count}")
+        print(f"Time: {total_time:.1f}s")
+        print(f"Results: {csv_path}")
 
 
-def quick_scan(input_folder, output_folder=None, sensitivity='medium'):
+def quick_scan(input_folder, output_folder=None, sensitivity='medium', downscale_size=512, downscale=True):
     if output_folder is None:
         timestamp = time.strftime('%Y%m%d_%H%M%S')
-        output_folder = f"results_fast_{timestamp}"
+        output_folder = f"results"
 
-    processor = BatchProcessor(input_folder, output_folder, sensitivity)
+    processor = BatchProcessor(input_folder, output_folder, sensitivity, 24, downscale_size, downscale)
     return processor.process_batch()

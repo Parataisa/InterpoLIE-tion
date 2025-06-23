@@ -8,18 +8,21 @@ from pathlib import Path
 from kirchner import KirchnerDetector
 from batchProcessor import BatchProcessor, quick_scan
 from scalingTestSuite import ScalingTestSuite
+from fileHandler import FileHandler
 
 IMAGE_FOLDER_PATH = 'img'
+DOWNSCALE_SIZE = 256  
+DOWNSCALE = True       
 
-def run_scaling_test(input_folder, scaling_factors=None, sensitivity='medium', output_folder=None, create_visualizations=True):
+def run_scaling_test(input_folder, scaling_factors=None, sensitivity='medium', output_folder=None, create_visualizations=True, downscale_size=512, downscale=True):
     try:
         test_suite = ScalingTestSuite(scaling_factors=scaling_factors)
-        return test_suite.run_scaling_test(input_folder, output_folder, sensitivity, KirchnerDetector, create_visualizations)
+        return test_suite.run_scaling_test(input_folder, output_folder, sensitivity, KirchnerDetector, create_visualizations, downscale_size, downscale)
     except Exception as e:
         print(f"Error running scaling test: {e}")
         return None
 
-def run_demo(sensitivity='medium'):
+def run_demo(sensitivity='medium', downscale_size=1024, downscale=True):
     if not os.path.exists(IMAGE_FOLDER_PATH):
         print(f"Error: Image folder '{IMAGE_FOLDER_PATH}' not found.")
         return None
@@ -39,8 +42,7 @@ def run_demo(sensitivity='medium'):
     print("\n=== Batch Processing with Gradient-Focused Analysis ===")
     output_folder_batch = Path(root_demo_folder) / 'batch_results'
     try:
-        results_batch = quick_scan(IMAGE_FOLDER_PATH, str(output_folder_batch), 
-                                 sensitivity=sensitivity)
+        results_batch = quick_scan(IMAGE_FOLDER_PATH, str(output_folder_batch), sensitivity=sensitivity, downscale_size=downscale_size, downscale=downscale)
         print(f"✓ Batch processing completed! Results in: {output_folder_batch}")
         print(f"✓ Gradient-focused analysis: {output_folder_batch}/detailed_batch_analysis_report.png")
         if not results_batch.empty:
@@ -55,19 +57,21 @@ def run_demo(sensitivity='medium'):
     print("\n=== Scaling Test with Individual Data Analysis ===")
     scaling_output = Path(root_demo_folder) / 'scaling_test'
     try:
-        demo_scaling_factors = [0.4, 0.5, 0.6, 0.8, 0.9, 1.1, 1.2, 1.4, 1.5, 1.6, 1.8, 2.0]
+        demo_scaling_factors = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8, 0.9, 1.1, 1.2, 1.4, 1.5, 1.6, 1.8, 2.0]
         results_scaling = run_scaling_test(IMAGE_FOLDER_PATH, 
                                          scaling_factors=demo_scaling_factors,
                                          sensitivity=sensitivity,
                                          output_folder=str(scaling_output),
-                                         create_visualizations=True)
+                                         create_visualizations=False,
+                                         downscale_size=downscale_size,
+                                         downscale=downscale)
     except Exception as e:
         print(f"✗ Scaling test failed: {e}")
     
     print(f"\n🎯 Demo completed! All results organized in: {root_demo_folder}")
 
 def main():
-    run_demo(sensitivity='medium')
+    run_demo(sensitivity='medium', downscale_size=DOWNSCALE_SIZE, downscale=DOWNSCALE)
     
 if __name__ == "__main__":
     try:

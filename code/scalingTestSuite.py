@@ -15,10 +15,12 @@ from scipy.ndimage import gaussian_filter, convolve
 from PIL import Image
 from matplotlib.colors import LogNorm
 from visualizations import create_scaling_visualization
+from fileHandler import FileHandler
 
 class ScalingTestSuite:
     def __init__(self, scaling_factors=None, interpolation_methods=None):
         self.scaling_factors = scaling_factors or [0.5, 0.8, 1.2, 1.6, 2.0]
+        self.file_handler = FileHandler()
             
         self.interpolation_methods = {
             'nearest': cv2.INTER_NEAREST,
@@ -27,14 +29,12 @@ class ScalingTestSuite:
             'lanczos': cv2.INTER_LANCZOS4
         }
 
-    def create_scaled_images(self, input_folder, output_folder, downscale_size=512, downscale=True):
+    def create_scaled_images(self, input_folder, output_folder):
         input_path = Path(input_folder)
         output_path = Path(output_folder)
-        output_path.mkdir(parents=True, exist_ok=True)
+        self.file_handler.create_output_folder(output_path)
         
-        supported_formats = {'.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp', '.webp'}
-        images = [f for f in input_path.rglob('*') 
-                 if f.is_file() and f.suffix.lower() in supported_formats]
+        images = self.file_handler.scan_folder(input_folder)
         
         print(f"Creating scaled versions of {len(images)} images...")
         
@@ -47,20 +47,11 @@ class ScalingTestSuite:
                 if img is None:
                     print(f"  Could not load {img_path.name}, skipping...")
                     continue
-                
-                h, w = img.shape[:2]
-                # downscale image for testing
-                if (h > downscale_size or w > downscale_size) and downscale:
-                    scale_factor = min(downscale_size / h, downscale_size / w)
-                    new_h, new_w = int(h * scale_factor), int(w * scale_factor)
-                    img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
-                    h, w = img.shape[:2]
-                    
                 original_name = img_path.stem
                 original_ext = img_path.suffix
                 
                 image_folder = output_path / original_name
-                image_folder.mkdir(exist_ok=True)
+                self.file_handler.create_output_folder(image_folder)
                 
                 # Save original
                 original_copy = image_folder / f"{original_name}_original{original_ext}"
@@ -73,6 +64,7 @@ class ScalingTestSuite:
                     'category': 'original'
                 })
 
+                h, w = img.shape[:2]
                 # Create scaled versions
                 for scale_factor in self.scaling_factors:
                     for interp_name, interp_method in self.interpolation_methods.items():
@@ -128,13 +120,13 @@ class ScalingTestSuite:
                 'error': str(e)
             }
 
-    def run_scaling_test(self, input_folder, output_folder=None, sensitivity='medium', detector_class=None, create_visualizations=True):
+    def run_scaling_test(self, input_folder, output_folder=None, sensitivity='medium', detector_class=None, create_visualizations=True, downscale_size=512, downscale=True):
         if output_folder is None:
             timestamp = time.strftime('%Y%m%d_%H%M%S')
             output_folder = f'scaling_test_{timestamp}'
         
         output_path = Path(output_folder)
-        output_path.mkdir(parents=True, exist_ok=True)
+        self.file_handler.create_output_folder(output_path)
         
         # Step 1: Create scaled test images
         print("=== STEP 1: Creating scaled test images ===")
@@ -148,13 +140,10 @@ class ScalingTestSuite:
             from kirchner import KirchnerDetector
             detector_class = KirchnerDetector
             
-        detector = detector_class(sensitivity=sensitivity)
+        detector = detector_class(sensitivity=sensitivity, downscale_size=downscale_size, downscale=downscale)
         print(f"Using detector with sensitivity: {sensitivity}")
         
-        images = []
-        for file_path in Path(scaled_folder).rglob('*'):
-            if file_path.is_file() and file_path.suffix.lower() in {'.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp', '.webp'}:
-                images.append(file_path)
+        images = self.file_handler.scan_folder(scaled_folder)
         
         print(f"Found {len(images)} images to process")
         
@@ -167,7 +156,7 @@ class ScalingTestSuite:
             # Step 3: Create visualizations
             print("\n=== STEP 3: Creating visualizations ===")
             vis_folder = output_path / 'visualizations'
-            vis_folder.mkdir(exist_ok=True)
+            self.file_handler.create_output_folder(vis_folder)
             
             results_by_image = {}
             for result in results:
@@ -189,7 +178,7 @@ class ScalingTestSuite:
             visualization_count = 0
             for original_name, image_results in results_by_image.items():
                 image_vis_folder = vis_folder / original_name
-                image_vis_folder.mkdir(exist_ok=True)
+                self.file_handler.create_output_folder(image_vis_folder)
                 
                 for result in image_results:
                     try:
@@ -260,7 +249,6 @@ class ScalingTestSuite:
                 row.update({
                     'max_gradient': metrics.get('max_gradient', None),
                     'gradient_threshold': metrics.get('gradient_threshold', None),
-                    'peak_count': metrics.get('peak_count', None),
                     'spectrum_mean': metrics.get('spectrum_mean', None),
                     'spectrum_std': metrics.get('spectrum_std', None),
                     'spectrum_max': metrics.get('spectrum_max', None)
@@ -472,10 +460,10 @@ class ScalingTestSuite:
         
         plt.tight_layout()
         plt.subplots_adjust(top=0.94)  
-        plot_path = output_path / 'detailed_scaling_analysis_report.png'
+        plot_path = output_path / 'scaling_analysis_report.png'
         plt.savefig(plot_path, bbox_inches='tight', facecolor='white', dpi=300)
         plt.close()
 
-def run_scaling_test(input_folder, scaling_factors=None, sensitivity='medium', output_folder=None, detector_class=None, create_visualizations=True):
+def run_scaling_test(input_folder, scaling_factors=None, sensitivity='medium', output_folder=None, detector_class=None, create_visualizations=True, downscale_size=512, downscale=True):
     test_suite = ScalingTestSuite(scaling_factors=scaling_factors)
-    return test_suite.run_scaling_test(input_folder, output_folder, sensitivity, detector_class, create_visualizations)
+    return test_suite.run_scaling_test(input_folder, output_folder, sensitivity, detector_class, create_visualizations, downscale_size, downscale)

@@ -6,46 +6,10 @@ from pathlib import Path
 from PIL import Image
 import os
 import warnings
+from fileHandler import FileHandler
 
 warnings.filterwarnings('ignore', message='This figure includes Axes that are not compatible with tight_layout')
 matplotlib.use('Agg')  
-
-
-def load_image_safely(image_path, target_size=None):
-    try:
-        # Method 1: Try with PIL first (more robust)
-        img = Image.open(image_path).convert('RGB')
-        img_array = np.array(img)
-        
-        if target_size:
-            img_array = cv2.resize(img_array, target_size, interpolation=cv2.INTER_LINEAR)
-        
-        return img_array
-        
-    except Exception as e1:
-        print(f"OpenCV could not load image: {image_path}")
-        return None
-
-def find_image_file(filename, search_paths=None):
-    if search_paths is None:
-        search_paths = ['.', 'img', '../img', '../../img']
-    
-    if os.path.isabs(filename) and os.path.exists(filename):
-        return filename
-    
-    for search_path in search_paths:
-        search_dir = Path(search_path)
-        if search_dir.exists():
-            candidate = search_dir / filename
-            if candidate.exists():
-                return str(candidate)
-            
-            for file_path in search_dir.rglob(filename):
-                if file_path.is_file():
-                    return str(file_path)
-    
-    print(f"Could not find image file: {filename}")
-    return None
 
 
 def create_unified_visualization(result_data, output_path, visualization_type='batch'):
@@ -81,17 +45,22 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
     image_loaded = False
     image_file_path = result_data.get('file_path', '')
     
+    # Initialize file handler for image loading
+    file_handler = FileHandler()
+    
     search_paths = ['.', 'img', '../img', '../../img']
     if image_file_path:
         search_paths.insert(0, str(Path(image_file_path).parent))
     
-    found_image_path = find_image_file(filename, search_paths)
+    found_image_path = file_handler.find_image_file(filename, search_paths)
     
     if found_image_path:
-        img_array = load_image_safely(found_image_path, target_size)
-        if img_array is not None:
+        try:
+            img_array = file_handler.load_image_rgb(found_image_path, target_size)
             ax1.imshow(img_array)
             image_loaded = True
+        except Exception as e:
+            print(f"Warning: Could not load image using FileHandler: {e}")
     
     if not image_loaded:
         print(f"Warning: Could not load original image for {filename}, using prediction error as fallback")
@@ -227,6 +196,8 @@ def create_comparison_visualization(results_list, output_path, title="Detection 
     
     fig.suptitle(title, fontsize=16, fontweight='bold', y=0.98)
     
+    file_handler = FileHandler()
+    
     for i, result in enumerate(results_list):
         filename = result['file_name']
         detected = result['detected']
@@ -236,15 +207,15 @@ def create_comparison_visualization(results_list, output_path, title="Detection 
         target_size = (p_map.shape[1], p_map.shape[0])
         
         image_file_path = result.get('file_path', '')
-        found_image_path = find_image_file(filename)
+        found_image_path = file_handler.find_image_file(filename)
         
         # Row 1: Original Images
         ax1 = axes[0, i]
         if found_image_path:
-            img_array = load_image_safely(found_image_path, target_size)
-            if img_array is not None:
+            try:
+                img_array = file_handler.load_image_rgb(found_image_path, target_size)
                 ax1.imshow(img_array)
-            else:
+            except Exception as e:
                 prediction_error = result['prediction_error']
                 error_resized = cv2.resize(prediction_error.astype(np.float32), 
                                          target_size, interpolation=cv2.INTER_LINEAR)
@@ -281,7 +252,6 @@ def create_comparison_visualization(results_list, output_path, title="Detection 
     return str(output_path)
 
 
-# Wrapper functions for backward compatibility
 def save_scaling_visualization(filename, p_map, spectrum, prediction_error, detected, 
                              scaling_factor, interpolation_method, detailed_metrics, output_folder):
     return create_scaling_visualization(filename, p_map, spectrum, prediction_error, detected,
