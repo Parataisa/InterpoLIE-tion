@@ -1,17 +1,26 @@
 import os
 import sys
 import time
-from pathlib import Path
+import cv2
 
+from pathlib import Path
 from batchProcessor import quick_scan
 from scalingTestSuite import run_scaling_test
 
 # Configuration
 IMAGE_FOLDER_PATH = 'img'
-DOWNSCALE_SIZE = 512  
+DOWNSCALE_SIZE = 256  
 DOWNSCALE = True
 CROP_CENTER = False
-SCALING_VISUALIZATION = True
+SCALING_VISUALIZATION = False
+
+SCALING_FACTORS = [0.3, 0.5, 0.7, 0.9, 1.2, 1.5, 1.8, 2.0]
+INTERPOLATION_METHODS = {
+    'nearest': cv2.INTER_NEAREST,
+    'linear': cv2.INTER_LINEAR,
+    'cubic': cv2.INTER_CUBIC,
+    'lanczos': cv2.INTER_LANCZOS4
+}
 
 def run_demo(sensitivity='medium'):
     if not os.path.exists(IMAGE_FOLDER_PATH):
@@ -54,10 +63,10 @@ def run_demo(sensitivity='medium'):
     print("\n=== Scaling Test with Individual Data Analysis ===")
     scaling_output = Path(root_demo_folder) / 'scaling_test'
     try:
-        demo_scaling_factors = [0.3, 0.5, 0.7, 0.9, 1.2, 1.5, 1.8, 2.0]
         results_scaling = run_scaling_test(
             IMAGE_FOLDER_PATH, 
-            scaling_factors=demo_scaling_factors,
+            scaling_factors=SCALING_FACTORS,
+            interpolation_methods=INTERPOLATION_METHODS,
             sensitivity=sensitivity,
             output_folder=str(scaling_output),
             create_visualizations=SCALING_VISUALIZATION,

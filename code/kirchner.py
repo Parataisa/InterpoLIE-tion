@@ -28,9 +28,9 @@ class KirchnerDetector:
         self.file_handler = FileHandler(downscale_size, downscale)
         
         sensitivity_params = {
-            'low':    {'gradient_threshold': 0.005}, 
-            'medium': {'gradient_threshold': 0.012},  
-            'high':   {'gradient_threshold': 0.020}    
+            'low':    {'gradient_threshold': 0.008}, 
+            'medium': {'gradient_threshold': 0.016},  
+            'high':   {'gradient_threshold': 0.032}    
         }
 
         params = sensitivity_params.get(sensitivity, sensitivity_params['medium'])
@@ -101,7 +101,7 @@ class KirchnerDetector:
         return p_map
 
     def compute_spectrum(self, p_map):
-        kernel_size = max(5, min(p_map.shape) // 20)  
+        kernel_size = 9
         kernel = np.ones((kernel_size, kernel_size), dtype=np.float32) / (kernel_size**2)
         local_mean = convolve(p_map, kernel, mode='reflect')
         contrast_p_map = p_map - local_mean

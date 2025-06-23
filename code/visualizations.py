@@ -82,7 +82,7 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
     # Panel 2: P-Map
     ax2 = fig.add_subplot(gs[0, 1])
     p_map_enhanced = np.clip(p_map, 0, 1)
-    gamma = 0.1
+    gamma = 0.8
     p_map_dark = np.power(p_map_enhanced, gamma)
     
     im2 = ax2.imshow(p_map_dark, cmap='binary_r', vmin=0, vmax=1, aspect='equal')

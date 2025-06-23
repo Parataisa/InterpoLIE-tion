@@ -14,12 +14,12 @@ from kirchner import KirchnerDetector
 from tqdm import tqdm
 
 class ScalingTestSuite:
-    def __init__(self, scaling_factors=None, crop_center=False):
+    def __init__(self, scaling_factors=None, interpolation_methods=None, crop_center=False):
         self.scaling_factors = scaling_factors or [0.5, 0.8, 1.2, 1.6, 2.0]
         self.crop_center = crop_center
         self.file_handler = FileHandler(crop_center=crop_center)
             
-        self.interpolation_methods = {
+        self.interpolation_methods = interpolation_methods or {
             'nearest': cv2.INTER_NEAREST,
             'linear': cv2.INTER_LINEAR,
             'cubic': cv2.INTER_CUBIC,
@@ -241,6 +241,6 @@ class ScalingTestSuite:
         print(f"\n✅ Created {visualization_count} visualizations ({errors_count} errors)")
         return visualization_count, errors_count
 
-def run_scaling_test(input_folder, scaling_factors=None, sensitivity='medium', output_folder=None, detector_class=None, create_visualizations=True, downscale_size=512, downscale=True, crop_center=False):
-    test_suite = ScalingTestSuite(scaling_factors=scaling_factors, crop_center=crop_center)
+def run_scaling_test(input_folder, scaling_factors=None, interpolation_methods=None, sensitivity='medium', output_folder=None, detector_class=None, create_visualizations=True, downscale_size=512, downscale=True, crop_center=False):
+    test_suite = ScalingTestSuite(scaling_factors=scaling_factors, interpolation_methods=interpolation_methods, crop_center=crop_center)
     return test_suite.run_scaling_test(input_folder, output_folder, sensitivity, detector_class, create_visualizations, downscale_size, downscale)
