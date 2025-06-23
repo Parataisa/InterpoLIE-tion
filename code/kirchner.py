@@ -28,9 +28,9 @@ class KirchnerDetector:
         self.file_handler = FileHandler(downscale_size, downscale)
         
         sensitivity_params = {
-            'low':    {'gradient_threshold': 0.008}, 
-            'medium': {'gradient_threshold': 0.016},  
-            'high':   {'gradient_threshold': 0.032}    
+            'low':    {'gradient_threshold': 0.004}, 
+            'medium': {'gradient_threshold': 0.009},  
+            'high':   {'gradient_threshold': 0.015}    
         }
 
         params = sensitivity_params.get(sensitivity, sensitivity_params['medium'])

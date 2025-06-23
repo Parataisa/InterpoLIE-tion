@@ -71,13 +71,12 @@ class ScalingTestSuite:
         for img_idx, img_path in tqdm(enumerate(images), total=len(images), desc="Processing images", unit="img"):
             try:
                 img = self.file_handler.load_image(img_path, apply_downscale=source_downscale)
-                
                 original_name = img_path.stem
                 original_ext = img_path.suffix
-                
                 image_folder = output_path / original_name
                 self.file_handler.create_output_folder(image_folder)
                 
+                orig_h, orig_w = img.shape[:2]
                 original_copy = image_folder / f"{original_name}_original{original_ext}"
                 img_uint8 = np.clip(img, 0, 255).astype(np.uint8)
                 cv2.imwrite(str(original_copy), img_uint8)
@@ -88,26 +87,59 @@ class ScalingTestSuite:
                     'interpolation': 'original',
                     'category': 'original'
                 })
-
-                h, w = img.shape[:2]
                 
                 for scale_factor in self.scaling_factors:
                     for interp_name, interp_method in self.interpolation_methods.items():
                         try:
-                            new_h, new_w = int(h * scale_factor), int(w * scale_factor)
-                            scaled_img = cv2.resize(img, (new_w, new_h), interpolation=interp_method)
+                            new_h, new_w = int(orig_h * scale_factor), int(orig_w * scale_factor)
+                            
+                            if scale_factor < 1.0:
+                                scaled_img = cv2.resize(img, (new_w, new_h), interpolation=interp_method)
+                                final_img = scaled_img
+                            else:
+                                scaled_img = cv2.resize(img, (new_w, new_h), interpolation=interp_method)
+                                center_y, center_x = new_h // 2, new_w // 2
+                                top = center_y - orig_h // 2
+                                bottom = top + orig_h
+                                left = center_x - orig_w // 2
+                                right = left + orig_w
+                                
+                                # Boundary checks
+                                if top < 0:
+                                    bottom -= top
+                                    top = 0
+                                if left < 0:
+                                    right -= left
+                                    left = 0
+                                if bottom > new_h:
+                                    diff = bottom - new_h
+                                    bottom = new_h
+                                    top = max(0, top - diff)
+                                if right > new_w:
+                                    diff = right - new_w
+                                    right = new_w
+                                    left = max(0, left - diff)
+                                
+                                final_img = scaled_img[top:bottom, left:right]
+                                
+                                if final_img.shape[0] != orig_h or final_img.shape[1] != orig_w:
+                                    final_img = cv2.resize(final_img, (orig_w, orig_h), 
+                                                        interpolation=cv2.INTER_LINEAR)
                             
                             scaled_name = f"{original_name}_scale{scale_factor:.1f}_{interp_name}{original_ext}"
                             scaled_path = image_folder / scaled_name
-                            scaled_img_uint8 = np.clip(scaled_img, 0, 255).astype(np.uint8)
+                            
+                            scaled_img_uint8 = np.clip(final_img, 0, 255).astype(np.uint8)
                             cv2.imwrite(str(scaled_path), scaled_img_uint8)
                             
+                            actual_h, actual_w = final_img.shape[:2]
                             created_images.append({
                                 'file_path': str(scaled_path),
                                 'original_name': original_name,
                                 'scaling_factor': scale_factor,
                                 'interpolation': interp_name,
-                                'category': 'downscaled' if scale_factor < 1.0 else 'upscaled'
+                                'category': 'downscaled' if scale_factor < 1.0 else 'upscaled',
+                                'dimensions': (actual_h, actual_w)
                             })
                         except Exception as scale_error:
                             tqdm.write(f"Warning: Failed {scale_factor:.1f}x {interp_name} for {original_name}: {scale_error}")
@@ -117,7 +149,6 @@ class ScalingTestSuite:
         
         print(f"\nCreated {len(created_images)} test images")
         return created_images, str(output_path)
-
     def run_scaling_test(self, input_folder, output_folder=None, sensitivity='medium', detector_class=None, create_visualizations=True, downscale_size=512, downscale=True):
         if output_folder is None:
             timestamp = time.strftime('%Y%m%d_%H%M%S')
