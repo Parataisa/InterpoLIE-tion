@@ -12,7 +12,7 @@ class FileHandler:
         self.supported_formats = {'.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp', '.webp'}
         self.crop_center = crop_center
     
-    def _natural_sort_key(self, filepath):
+    def natural_sort_key(self, filepath):
         filename = filepath.name
         parts = re.split(r'(\d+)', filename)
         result = []
@@ -33,10 +33,10 @@ class FileHandler:
             if file_path.is_file() and file_path.suffix.lower() in self.supported_formats:
                 images.append(file_path)
         
-        images.sort(key=self._natural_sort_key)
+        images.sort(key=self.natural_sort_key)
         return images
     
-    def _apply_image_processing(self, img, apply_downscale=None, apply_crop=None):
+    def apply_image_processing(self, img, apply_downscale=None, apply_crop=None):
         should_downscale = apply_downscale if apply_downscale is not None else self.downscale
         should_crop = apply_crop if apply_crop is not None else self.crop_center
         
@@ -66,7 +66,7 @@ class FileHandler:
     def load_image(self, img_path, apply_downscale=None, apply_crop=None):
         try:
             img = np.array(Image.open(img_path).convert('L'))
-            img = self._apply_image_processing(img, apply_downscale, apply_crop)
+            img = self.apply_image_processing(img, apply_downscale, apply_crop)
             return img.astype(np.float32)
             
         except Exception as e:
@@ -77,7 +77,7 @@ class FileHandler:
             img = Image.open(img_path).convert('RGB')
             img_array = np.array(img)
             
-            img_array = self._apply_image_processing(img_array, apply_downscale, apply_crop)
+            img_array = self.apply_image_processing(img_array, apply_downscale, apply_crop)
             
             if target_size is not None:
                 target_h, target_w = target_size
@@ -87,13 +87,6 @@ class FileHandler:
             
         except Exception as e:
             raise IOError(f"Error loading RGB image {img_path}: {e}")
-    
-    def load_image_raw(self, img_path):
-        try:
-            img = np.array(Image.open(img_path).convert('L'))
-            return img.astype(np.float32)
-        except Exception as e:
-            raise IOError(f"Error loading raw image {img_path}: {e}")
     
     def find_image_file(self, filename, search_paths=None):
         if search_paths is None:

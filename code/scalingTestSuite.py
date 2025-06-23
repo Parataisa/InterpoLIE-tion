@@ -10,6 +10,7 @@ from pathlib import Path
 from visualizations import create_scaling_visualization
 from fileHandler import FileHandler
 from analysisReport import AnalysisReports
+from kirchner import KirchnerDetector
 
 class ScalingTestSuite:
     def __init__(self, scaling_factors=None, crop_center=False):
@@ -144,15 +145,9 @@ class ScalingTestSuite:
                                                                   downscale_size, downscale)
         
         print("\n=== STEP 2: Running Kirchner detection ===")
-        if detector_class is None:
-            from kirchner import KirchnerDetector
-            detector_class = KirchnerDetector
-            
+        detector_class = KirchnerDetector
         detector = detector_class(sensitivity=sensitivity, downscale_size=downscale_size, downscale=False)
-        print(f"Using detector with sensitivity: {sensitivity}")
-        print(f"Detector downscaling: Disabled (images pre-processed)")
-        print(f"Crop center: {'Enabled' if self.crop_center else 'Disabled'}")
-        
+
         images = self.file_handler.scan_folder(scaled_folder)
         print(f"Found {len(images)} images to process")
         

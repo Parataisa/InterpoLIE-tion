@@ -34,7 +34,7 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
         fig.suptitle(f'{filename} - {status}',
                     fontsize=16, fontweight='bold', color=title_color, y=0.95)
     
-    # Panel 1: Original Image with correct aspect ratio
+    # Panel 1: Original Image
     ax1 = fig.add_subplot(gs[0, 0])
     
     file_handler = FileHandler(crop_center=crop_center, downscale_size=downscale_size)
@@ -65,10 +65,9 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
     if found_image_path:
         try:
             print(f"    Loading image for visualization: {found_image_path}")
-            # Load without forcing target size to preserve aspect ratio
             img_array = file_handler.load_image_rgb(found_image_path, target_size=None, apply_downscale=True)
             ax1.imshow(img_array)
-            ax1.set_aspect('equal')  # Maintain aspect ratio
+            ax1.set_aspect('equal')  
             print(f"    Successfully loaded image for visualization")
         except Exception as e:
             print(f"    Warning: Image load failed for {filename}: {e}")
@@ -82,17 +81,17 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
     ax1.set_title('Original Image', fontsize=12, fontweight='bold')
     ax1.axis('off')
     
-    # Panel 2: P-Map with proper aspect ratio
+    # Panel 2: P-Map
     ax2 = fig.add_subplot(gs[0, 1])
     p_map_enhanced = np.clip(p_map, 0, 1)
-    gamma = 0.8
+    gamma = 0.1
     p_map_dark = np.power(p_map_enhanced, gamma)
     
-    im2 = ax2.imshow(p_map_dark, cmap='binary', vmin=0, vmax=1, aspect='equal')
+    im2 = ax2.imshow(p_map_dark, cmap='binary_r', vmin=0, vmax=1, aspect='equal')
     ax2.set_title('P-Map (Equation 21)', fontsize=12, fontweight='bold')
     plt.colorbar(im2, ax=ax2, shrink=0.8)
     
-    # Panel 3: Frequency Spectrum with proper aspect ratio
+    # Panel 3: Frequency Spectrum
     ax3 = fig.add_subplot(gs[0, 2])
     rows, cols = spectrum.shape
     freq_x = np.linspace(-0.5, 0.5, cols)
@@ -104,8 +103,8 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
     spectrum_log_min = spectrum_log.min()
     spectrum_log_max = spectrum_log.max()
     
-    im3 = ax3.imshow(spectrum_log, cmap='gray',
-                    vmin=spectrum_log_min, vmax=spectrum_log_max * 0.8,
+    im3 = ax3.imshow(spectrum_log, cmap='binary_r',
+                    vmin=spectrum_log_min, vmax=spectrum_log_max * 0.1,
                     extent=[freq_x[0], freq_x[-1], freq_y[-1], freq_y[0]],
                     origin='lower', aspect='equal')
     ax3.set_title('Frequency Spectrum', fontsize=12, fontweight='bold')
@@ -117,7 +116,7 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
     ax_table.axis('off')
     
     max_gradient = detailed_metrics.get('max_gradient', 0)
-    gradient_threshold = detailed_metrics.get('gradient_threshold', 0.008) 
+    gradient_threshold = detailed_metrics.get('gradient_threshold', 0.012) 
     
     table_data = [
         ['Gradient Analysis', 

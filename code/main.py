@@ -11,7 +11,7 @@ IMAGE_FOLDER_PATH = 'img'
 DOWNSCALE_SIZE = 512  
 DOWNSCALE = True
 CROP_CENTER = False
-SCALING_VISUALIZATION = False
+SCALING_VISUALIZATION = True
 
 def run_demo(sensitivity='medium'):
     if not os.path.exists(IMAGE_FOLDER_PATH):
@@ -54,7 +54,7 @@ def run_demo(sensitivity='medium'):
     print("\n=== Scaling Test with Individual Data Analysis ===")
     scaling_output = Path(root_demo_folder) / 'scaling_test'
     try:
-        demo_scaling_factors = [0.5, 0.7, 0.9, 1.2, 1.5, 1.8]
+        demo_scaling_factors = [0.3, 0.5, 0.7, 0.9, 1.2, 1.5, 1.8, 2.0]
         results_scaling = run_scaling_test(
             IMAGE_FOLDER_PATH, 
             scaling_factors=demo_scaling_factors,
