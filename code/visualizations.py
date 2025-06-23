@@ -12,7 +12,7 @@ warnings.filterwarnings('ignore', message='This figure includes Axes that are no
 matplotlib.use('Agg')  
 
 
-def create_unified_visualization(result_data, output_path, visualization_type='batch', crop_center=False):
+def create_unified_visualization(result_data, output_path, visualization_type='batch', crop_center=False, downscale_size=512):
     filename = result_data['file_name']
     detected = result_data['detected']
     p_map = result_data['p_map']
@@ -45,7 +45,7 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
     image_loaded = False
     image_file_path = result_data.get('file_path', '')
     
-    file_handler = FileHandler(crop_center=crop_center)
+    file_handler = FileHandler(crop_center=crop_center, downscale_size=downscale_size)
     
     search_paths = ['.', 'img', '../img', '../../img']
     if image_file_path:
@@ -147,17 +147,17 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
     return str(output_path)
 
 
-def create_batch_visualization(result, vis_folder, crop_center=False):
+def create_batch_visualization(result, vis_folder, crop_center=False, downscale_size=512):
     filename = result['file_name']
     base_name = filename.split('.')[0]
     output_path = vis_folder / f'{base_name}_analysis.png'
     
-    return create_unified_visualization(result, output_path, visualization_type='batch', crop_center=crop_center)
+    return create_unified_visualization(result, output_path, visualization_type='batch', crop_center=crop_center, downscale_size=downscale_size)
 
 
 def create_scaling_visualization(filename, p_map, spectrum, prediction_error, detected, 
                                scaling_factor, interpolation_method, detailed_metrics, 
-                               output_folder, file_path=None, crop_center=False):
+                               output_folder, file_path=None, crop_center=False, downscale_size=512):
     base_name = filename.split('.')[0]
     output_path = output_folder / f'{base_name}_scale{scaling_factor:.1f}_{interpolation_method}_analysis.png'
     
@@ -173,81 +173,4 @@ def create_scaling_visualization(filename, p_map, spectrum, prediction_error, de
         'interpolation': interpolation_method
     }
     
-    return create_unified_visualization(result_data, output_path, visualization_type='scaling', crop_center=crop_center)
-
-
-def create_comparison_visualization(results_list, output_path, title="Detection Comparison"):
-    n_results = len(results_list)
-    if n_results == 0:
-        return
-    
-    fig, axes = plt.subplots(3, n_results, figsize=(6*n_results, 16))
-    if n_results == 1:
-        axes = axes.reshape(-1, 1)
-    
-    fig.suptitle(title, fontsize=16, fontweight='bold', y=0.98)
-    
-    file_handler = FileHandler()
-    
-    for i, result in enumerate(results_list):
-        filename = result['file_name']
-        detected = result['detected']
-        p_map = result['p_map']
-        spectrum = result['spectrum']
-        
-        target_size = (p_map.shape[1], p_map.shape[0])
-        
-        image_file_path = result.get('file_path', '')
-        found_image_path = file_handler.find_image_file(filename)
-        
-        # Row 1: Original Images
-        ax1 = axes[0, i]
-        if found_image_path:
-            try:
-                img_array = file_handler.load_image_rgb(found_image_path, target_size)
-                ax1.imshow(img_array)
-            except Exception as e:
-                prediction_error = result['prediction_error']
-                error_resized = cv2.resize(prediction_error.astype(np.float32), 
-                                         target_size, interpolation=cv2.INTER_LINEAR)
-                error_range = np.percentile(error_resized, [1, 99])
-                ax1.imshow(error_resized, cmap='gray', vmin=error_range[0], vmax=error_range[1])
-        
-        status = "DETECTED" if detected else "CLEAN"
-        color = 'red' if detected else 'green'
-        ax1.set_title(f'{filename}\n{status}', fontsize=10, fontweight='bold', color=color)
-        ax1.axis('off')
-        
-        # Row 2: P-Maps
-        ax2 = axes[1, i]
-        p_map_enhanced = np.clip(p_map, 0, 1)
-        gamma = 0.8
-        p_map_dark = np.power(p_map_enhanced, gamma)
-        im2 = ax2.imshow(p_map_dark, cmap='binary', vmin=0, vmax=1)
-        ax2.set_title('P-Map', fontsize=10, fontweight='bold')
-        ax2.axis('off')
-        
-        # Row 3: Spectra
-        ax3 = axes[2, i]
-        spectrum_processed = spectrum.copy()
-        spectrum_min = spectrum_processed[spectrum_processed > 0].min() if np.any(spectrum_processed > 0) else 1e-10
-        spectrum_log = np.log10(spectrum_processed + spectrum_min)
-        im3 = ax3.imshow(spectrum_log, cmap='gray', vmin=spectrum_log.min(), vmax=spectrum_log.max() * 0.8)
-        ax3.set_title('Spectrum', fontsize=10, fontweight='bold')
-        ax3.axis('off')
-    
-    plt.subplots_adjust(left=0.05, bottom=0.05, right=0.95, top=0.90, wspace=0.1, hspace=0.3)
-    plt.savefig(output_path, bbox_inches='tight', facecolor='white', dpi=300)
-    plt.close(fig)
-    
-    return str(output_path)
-
-
-def save_scaling_visualization(filename, p_map, spectrum, prediction_error, detected, 
-                             scaling_factor, interpolation_method, detailed_metrics, output_folder):
-    return create_scaling_visualization(filename, p_map, spectrum, prediction_error, detected,
-                                      scaling_factor, interpolation_method, detailed_metrics, output_folder)
-
-
-def create_single_visualization(result, vis_folder):
-    return create_batch_visualization(result, vis_folder)
+    return create_unified_visualization(result_data, output_path, visualization_type='scaling', crop_center=crop_center, downscale_size=downscale_size)

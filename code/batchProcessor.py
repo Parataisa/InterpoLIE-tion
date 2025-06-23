@@ -132,7 +132,7 @@ class BatchProcessor:
         for result in results:
             if 'error' not in result and 'p_map' in result and result['p_map'] is not None:
                 try:
-                    create_batch_visualization(result, vis_folder, self.crop_center)
+                    create_batch_visualization(result, vis_folder, self.crop_center, self.file_handler.downscale_size)
                 except Exception as e:
                     print(f"Warning: Could not create visualization for {result['file_name']}: {e}")
         

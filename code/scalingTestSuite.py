@@ -131,6 +131,7 @@ class ScalingTestSuite:
         
         output_path = Path(output_folder)
         self.file_handler.create_output_folder(output_path)
+        self.file_handler.downscale_size = downscale_size
         
         # Step 1: Create scaled test images with initial downscaling
         print("=== STEP 1: Creating scaled test images ===")
@@ -219,7 +220,8 @@ class ScalingTestSuite:
                             result['detailed_metrics'],
                             image_vis_folder,
                             file_path,
-                            crop_center=self.crop_center
+                            crop_center=self.crop_center,
+                            downscale_size=downscale_size
                         )
                         visualization_count += 1
                     except Exception as e:
