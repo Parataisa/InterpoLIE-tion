@@ -11,13 +11,11 @@ from fileHandler import FileHandler
 warnings.filterwarnings('ignore', message='This figure includes Axes that are not compatible with tight_layout')
 matplotlib.use('Agg')  
 
-
 def create_unified_visualization(result_data, output_path, visualization_type='batch', crop_center=False, downscale_size=512):
     filename = result_data['file_name']
     detected = result_data['detected']
     p_map = result_data['p_map']
     spectrum = result_data['spectrum']
-    prediction_error = result_data['prediction_error']
     detailed_metrics = result_data.get('detailed_metrics', {})
     
     scaling_factor = result_data.get('scaling_factor', 1.0)
@@ -26,54 +24,75 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
     fig = plt.figure(figsize=(16, 10))
     gs = fig.add_gridspec(2, 3, height_ratios=[1, 0.4], hspace=0.3, wspace=0.3)
     
+    title_color = 'red' if detected else 'green'
+    status = "DETECTED" if detected else "CLEAN"
+    
     if visualization_type == 'scaling':
-        title_color = 'red' if detected else 'green'
-        status = "DETECTED" if detected else "CLEAN"
         fig.suptitle(f'{filename} - {status}\nScale: {scaling_factor:.1f}x, Method: {interpolation}',
                     fontsize=16, fontweight='bold', color=title_color, y=0.95)
     else:
-        title_color = 'red' if detected else 'green'
-        status = "DETECTED" if detected else "CLEAN"
         fig.suptitle(f'{filename} - {status}',
                     fontsize=16, fontweight='bold', color=title_color, y=0.95)
     
-    target_size = (p_map.shape[1], p_map.shape[0]) 
-    
-    # Panel 1: Original Image
+    # Panel 1: Original Image with correct aspect ratio
     ax1 = fig.add_subplot(gs[0, 0])
     
-    image_loaded = False
-    image_file_path = result_data.get('file_path', '')
-    
     file_handler = FileHandler(crop_center=crop_center, downscale_size=downscale_size)
-    
+    image_file_path = result_data.get('file_path', '')
     search_paths = ['.', 'img', '../img', '../../img']
-    if image_file_path:
-        search_paths.insert(0, str(Path(image_file_path).parent))
     
-    found_image_path = file_handler.find_image_file(filename, search_paths)
+    if image_file_path:
+        file_path_obj = Path(image_file_path)
+        search_paths.insert(0, str(file_path_obj.parent))
+        if file_path_obj.exists():
+            search_paths.insert(0, str(file_path_obj))
+    
+    found_image_path = None
+    
+    if image_file_path and Path(image_file_path).exists():
+        found_image_path = image_file_path
+    else:
+        found_image_path = file_handler.find_image_file(filename, search_paths)
+        
+        if not found_image_path:
+            base_name = Path(filename).stem
+            extensions = ['.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp', '.webp']
+            for ext in extensions:
+                found_image_path = file_handler.find_image_file(base_name + ext, search_paths)
+                if found_image_path:
+                    break
     
     if found_image_path:
         try:
-            img_array = file_handler.load_image_rgb(found_image_path, target_size)
+            print(f"    Loading image for visualization: {found_image_path}")
+            # Load without forcing target size to preserve aspect ratio
+            img_array = file_handler.load_image_rgb(found_image_path, target_size=None, apply_downscale=True)
             ax1.imshow(img_array)
+            ax1.set_aspect('equal')  # Maintain aspect ratio
+            print(f"    Successfully loaded image for visualization")
         except Exception as e:
-            print(f"Warning: Could not load image using FileHandler: {e}")
+            print(f"    Warning: Image load failed for {filename}: {e}")
+            ax1.text(0.5, 0.5, f'Image load failed:\n{filename}\n({str(e)[:30]}...)', ha='center', va='center',
+                    transform=ax1.transAxes, fontsize=10, bbox=dict(boxstyle="round", facecolor='wheat'))
+    else:
+        print(f"    Warning: Image not found for visualization: {filename}")
+        ax1.text(0.5, 0.5, f'Image not found:\n{filename}\nSearched in:\n{search_paths[:3]}', ha='center', va='center',
+                transform=ax1.transAxes, fontsize=10, bbox=dict(boxstyle="round", facecolor='wheat'))
     
     ax1.set_title('Original Image', fontsize=12, fontweight='bold')
     ax1.axis('off')
     
-    # Panel 2: P-Map
+    # Panel 2: P-Map with proper aspect ratio
     ax2 = fig.add_subplot(gs[0, 1])
     p_map_enhanced = np.clip(p_map, 0, 1)
     gamma = 0.8
     p_map_dark = np.power(p_map_enhanced, gamma)
     
-    im2 = ax2.imshow(p_map_dark, cmap='binary', vmin=0, vmax=1)
+    im2 = ax2.imshow(p_map_dark, cmap='binary', vmin=0, vmax=1, aspect='equal')
     ax2.set_title('P-Map (Equation 21)', fontsize=12, fontweight='bold')
     plt.colorbar(im2, ax=ax2, shrink=0.8)
     
-    # Panel 3: Frequency Spectrum
+    # Panel 3: Frequency Spectrum with proper aspect ratio
     ax3 = fig.add_subplot(gs[0, 2])
     rows, cols = spectrum.shape
     freq_x = np.linspace(-0.5, 0.5, cols)
@@ -88,7 +107,7 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
     im3 = ax3.imshow(spectrum_log, cmap='gray',
                     vmin=spectrum_log_min, vmax=spectrum_log_max * 0.8,
                     extent=[freq_x[0], freq_x[-1], freq_y[-1], freq_y[0]],
-                    origin='lower')
+                    origin='lower', aspect='equal')
     ax3.set_title('Frequency Spectrum', fontsize=12, fontweight='bold')
     ax3.set_xlabel('Normalized Frequency f_x')
     ax3.set_ylabel('Normalized Frequency f_y')
@@ -146,14 +165,13 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
     
     return str(output_path)
 
-
 def create_batch_visualization(result, vis_folder, crop_center=False, downscale_size=512):
     filename = result['file_name']
     base_name = filename.split('.')[0]
     output_path = vis_folder / f'{base_name}_analysis.png'
     
-    return create_unified_visualization(result, output_path, visualization_type='batch', crop_center=crop_center, downscale_size=downscale_size)
-
+    return create_unified_visualization(result, output_path, visualization_type='batch', 
+                                      crop_center=crop_center, downscale_size=downscale_size)
 
 def create_scaling_visualization(filename, p_map, spectrum, prediction_error, detected, 
                                scaling_factor, interpolation_method, detailed_metrics, 
@@ -173,4 +191,5 @@ def create_scaling_visualization(filename, p_map, spectrum, prediction_error, de
         'interpolation': interpolation_method
     }
     
-    return create_unified_visualization(result_data, output_path, visualization_type='scaling', crop_center=crop_center, downscale_size=downscale_size)
+    return create_unified_visualization(result_data, output_path, visualization_type='scaling', 
+                                      crop_center=crop_center, downscale_size=downscale_size)

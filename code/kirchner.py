@@ -30,7 +30,6 @@ class KirchnerDetector:
         self.tau = tau  
         self.sigma = sigma
 
-        # Initialize file handler
         self.file_handler = FileHandler(downscale_size, downscale)
         
         sensitivity_params = {
@@ -119,7 +118,6 @@ class KirchnerDetector:
         fft_result = fft2(contrast_p_map)
         spectrum = np.abs(fftshift(fft_result))
         
-        # Normalize (optional for display)
         if np.max(spectrum) > 0:
             spectrum = spectrum / np.max(spectrum)
         
