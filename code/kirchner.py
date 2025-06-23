@@ -2,13 +2,14 @@
 Kirchner fast resampling detector implementation
 Based on: "Fast and reliable resampling detection by spectral analysis of fixed linear predictor residue" (2008)
 """
+
 import numpy as np
 import cv2
 from scipy.fft import fft2, fftshift
 from scipy.ndimage import convolve
 from pathlib import Path
 from fileHandler import FileHandler
-
+from tqdm import tqdm
 
 class KirchnerDetector:
     def __init__(self, sensitivity='medium', lambda_param=1.0, tau=2.0, sigma=1.0, downscale_size=512, downscale=True):
@@ -39,19 +40,18 @@ class KirchnerDetector:
     def detect(self, img_input, skip_internal_downscale=False):
         try:
             if isinstance(img_input, (str, Path)):
-                print(f"      Loading image: {Path(img_input).name}")
+                tqdm.write(f"      Loading image: {Path(img_input).name}")
                 image = self.file_handler.load_image(img_input, apply_downscale=not skip_internal_downscale)
-                print(f"      Image loaded, size: {image.shape}")
+                tqdm.write(f"      Image loaded, size: {image.shape}")
             else:
                 image = img_input.astype(np.float32)
-                print(f"      Using pre-loaded image, size: {image.shape}")
+                tqdm.write(f"      Using pre-loaded image, size: {image.shape}")
             
-            print(f"      Running Kirchner detection...")
+            tqdm.write(f"      Running Kirchner detection...")
             results = self.detect_resampling(image)
             detected = results['detected']
-            print(f"      Detection result: {'DETECTED' if detected else 'CLEAN'}")
+            tqdm.write(f"      Detection result: {'DETECTED' if detected else 'CLEAN'}")
 
-            
             return {
                 'detected': results['detected'],
                 'p_map': results['p_map'],
@@ -59,32 +59,32 @@ class KirchnerDetector:
                 'prediction_error': results['prediction_error']
             }
         except Exception as e:
-            print(f"      ERROR in detect(): {e}")
+            tqdm.write(f"      ERROR in detect(): {e}")
             raise
 
     def detect_resampling(self, image):
-        print(f"        Step 1: Input preparation")
+        tqdm.write(f"        Step 1: Input preparation")
         if len(image.shape) == 3:
             image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         image = image.astype(np.float32)
         
-        print(f"        Step 2: Linear prediction with preset coefficients (Equation 25)")
+        tqdm.write(f"        Step 2: Linear prediction with preset coefficients (Equation 25)")
         predicted = convolve(image, self.predictor_filter, mode='reflect')
         
-        print(f"        Step 3: Prediction error computation")
+        tqdm.write(f"        Step 3: Prediction error computation")
         prediction_error = image - predicted
         
-        print(f"        Step 4: P-map generation (Equation 21: p = lambda * exp(-|e|^tau / sigma))")
+        tqdm.write(f"        Step 4: P-map generation (Equation 21: p = lambda * exp(-|e|^tau / sigma))")
         p_map = self.generate_p_map(prediction_error)
         
-        print(f"        Step 5: Spectrum computation with contrast function gamma")
+        tqdm.write(f"        Step 5: Spectrum computation with contrast function gamma")
         spectrum = self.compute_spectrum(p_map)
         
-        print(f"        Step 6: Cumulative periodogram detection (Equation 23-24)")
+        tqdm.write(f"        Step 6: Cumulative periodogram detection (Equation 23-24)")
         detected, max_gradient, gradient_map = self.detect_cumulative_periodogram(spectrum)
         
-        print(f"          Max gradient: {max_gradient:.6f}, Threshold: {self.gradient_threshold:.6f}")
-        print(f"          Detection result: {'DETECTED' if detected else 'CLEAN'}")
+        tqdm.write(f"          Max gradient: {max_gradient:.6f}, Threshold: {self.gradient_threshold:.6f}")
+        tqdm.write(f"          Detection result: {'DETECTED' if detected else 'CLEAN'}")
         
         return {
             'p_map': p_map,
@@ -107,7 +107,6 @@ class KirchnerDetector:
         contrast_p_map = p_map - local_mean
         
         contrast_p_map = np.sign(contrast_p_map) * np.abs(contrast_p_map) ** 0.8
-        
         contrast_p_map = contrast_p_map - np.mean(contrast_p_map)
         
         h, w = contrast_p_map.shape
@@ -116,7 +115,6 @@ class KirchnerDetector:
         window = window_h * window_w
         windowed_p_map = contrast_p_map * window
         
-        # Compute FFT and shift zero frequency to center
         fft_result = fft2(windowed_p_map)
         spectrum = np.abs(fftshift(fft_result))
         
@@ -126,7 +124,6 @@ class KirchnerDetector:
         return spectrum
 
     def detect_cumulative_periodogram(self, spectrum):
-        # Remove DC component
         spectrum = spectrum.copy()
         h, w = spectrum.shape
         center_h, center_w = h // 2, w // 2
@@ -134,7 +131,6 @@ class KirchnerDetector:
         
         first_quadrant = spectrum[center_h:, center_w:]
         
-        # Compute energy |P(f)|^2
         energy = first_quadrant ** 2
         total_energy = np.sum(energy)
         
@@ -153,9 +149,7 @@ class KirchnerDetector:
         
         sort_indices = np.argsort(flat_radial)
         sorted_energy = flat_energy[sort_indices]
-        sorted_radial = flat_radial[sort_indices]
         
-        # Compute cumulative periodogram C(f) per Equation 23
         cumulative_energy = np.cumsum(sorted_energy)
         C_values = cumulative_energy / total_energy
         
@@ -164,7 +158,6 @@ class KirchnerDetector:
             row, col = idx // w_quad, idx % w_quad
             C_2d[row, col] = C_values[i]
         
-        # Compute gradient magnitude delta' = max |grad C(f)| per Equation 24
         grad_y, grad_x = np.gradient(C_2d)
         gradient_magnitude = np.sqrt(grad_x**2 + grad_y**2)
         max_grad = np.max(gradient_magnitude)

@@ -64,11 +64,9 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
     
     if found_image_path:
         try:
-            print(f"    Loading image for visualization: {found_image_path}")
             img_array = file_handler.load_image_rgb(found_image_path, target_size=None, apply_downscale=True)
             ax1.imshow(img_array)
             ax1.set_aspect('equal')  
-            print(f"    Successfully loaded image for visualization")
         except Exception as e:
             print(f"    Warning: Image load failed for {filename}: {e}")
             ax1.text(0.5, 0.5, f'Image load failed:\n{filename}\n({str(e)[:30]}...)', ha='center', va='center',

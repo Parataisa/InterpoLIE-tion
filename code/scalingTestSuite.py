@@ -11,6 +11,7 @@ from visualizations import create_scaling_visualization
 from fileHandler import FileHandler
 from analysisReport import AnalysisReports
 from kirchner import KirchnerDetector
+from tqdm import tqdm
 
 class ScalingTestSuite:
     def __init__(self, scaling_factors=None, crop_center=False):
@@ -24,6 +25,33 @@ class ScalingTestSuite:
             'cubic': cv2.INTER_CUBIC,
             'lanczos': cv2.INTER_LANCZOS4
         }
+
+    def process_with_detailed_metrics(self, img_path, detector):
+        try:
+            start_time = time.time()
+            
+            img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
+            if img is None:
+                raise IOError(f"Could not load image: {img_path}")
+                
+            img = img.astype(np.float32)
+            
+            result = detector.detect(img, skip_internal_downscale=True)
+            detailed_metrics = detector.extract_detection_metrics(result['spectrum'])
+            
+            processing_time = time.time() - start_time
+            
+            return {
+                'file_name': Path(img_path).name,
+                'detected': result['detected'],
+                'processing_time': processing_time,
+                'p_map': result['p_map'],
+                'spectrum': result['spectrum'],
+                'prediction_error': result['prediction_error'],
+                'detailed_metrics': detailed_metrics
+            }
+        except Exception as e:
+            return {'file_name': Path(img_path).name, 'detected': None, 'error': str(e)}
 
     def create_scaled_images(self, input_folder, output_folder, source_downscale_size=512, source_downscale=True):
         input_path = Path(input_folder)
@@ -40,12 +68,9 @@ class ScalingTestSuite:
         
         created_images = []
         
-        for img_idx, img_path in enumerate(images):
-            print(f"Processing image {img_idx + 1}/{len(images)}: {img_path.name}")
+        for img_idx, img_path in tqdm(enumerate(images), total=len(images), desc="Processing images", unit="img"):
             try:
-                print(f"    Loading and processing: {img_path.name}")
                 img = self.file_handler.load_image(img_path, apply_downscale=source_downscale)
-                print(f"    Processed image size: {img.shape} (crop_center: {self.crop_center})")
                 
                 original_name = img_path.stem
                 original_ext = img_path.suffix
@@ -65,11 +90,11 @@ class ScalingTestSuite:
                 })
 
                 h, w = img.shape[:2]
-                print(f"    Creating scaled versions from {w}x{h} processed image...")
+                
                 for scale_factor in self.scaling_factors:
                     for interp_name, interp_method in self.interpolation_methods.items():
-                        new_h, new_w = int(h * scale_factor), int(w * scale_factor)
                         try:
+                            new_h, new_w = int(h * scale_factor), int(w * scale_factor)
                             scaled_img = cv2.resize(img, (new_w, new_h), interpolation=interp_method)
                             
                             scaled_name = f"{original_name}_scale{scale_factor:.1f}_{interp_name}{original_ext}"
@@ -84,50 +109,14 @@ class ScalingTestSuite:
                                 'interpolation': interp_name,
                                 'category': 'downscaled' if scale_factor < 1.0 else 'upscaled'
                             })
-                            
                         except Exception as scale_error:
-                            print(f"      Warning: Failed to create {scale_factor:.1f}x {interp_name} version: {scale_error}")
-                            continue
-                        
+                            tqdm.write(f"Warning: Failed {scale_factor:.1f}x {interp_name} for {original_name}: {scale_error}")
+                            
             except Exception as e:
-                print(f"  Error processing {img_path}: {e}")
-                continue
+                tqdm.write(f"Error processing {img_path}: {e}")
         
-        print(f"Created {len(created_images)} test images")
+        print(f"\nCreated {len(created_images)} test images")
         return created_images, str(output_path)
-
-    def process_with_detailed_metrics(self, img_path, detector):
-        try:
-            start_time = time.time()
-            
-            img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
-            if img is None:
-                raise IOError(f"Could not load image: {img_path}")
-                
-            img = img.astype(np.float32)
-            print(f"      Processing scaled image, size: {img.shape}")
-            
-            result = detector.detect(img, skip_internal_downscale=True)
-            detailed_metrics = detector.extract_detection_metrics(result['spectrum'])
-            
-            processing_time = time.time() - start_time
-            
-            return {
-                'file_name': Path(img_path).name,
-                'detected': result['detected'],
-                'processing_time': processing_time,
-                'p_map': result['p_map'],
-                'spectrum': result['spectrum'],
-                'prediction_error': result['prediction_error'],
-                'detailed_metrics': detailed_metrics
-            }
-        except Exception as e:
-            print(f"ERROR processing {img_path}: {e}")
-            return {
-                'file_name': Path(img_path).name,
-                'detected': None,
-                'error': str(e)
-            }
 
     def run_scaling_test(self, input_folder, output_folder=None, sensitivity='medium', detector_class=None, create_visualizations=True, downscale_size=512, downscale=True):
         if output_folder is None:
@@ -142,102 +131,115 @@ class ScalingTestSuite:
         print("=== STEP 1: Creating scaled test images ===")
         scaled_images_folder = output_path / 'scaled_images'
         created_images, scaled_folder = self.create_scaled_images(input_folder, scaled_images_folder, 
-                                                                  downscale_size, downscale)
+                                                                downscale_size, downscale)
         
         print("\n=== STEP 2: Running Kirchner detection ===")
-        detector_class = KirchnerDetector
+        detector_class = detector_class or KirchnerDetector
         detector = detector_class(sensitivity=sensitivity, downscale_size=downscale_size, downscale=False)
 
         images = self.file_handler.scan_folder(scaled_folder)
         print(f"Found {len(images)} images to process")
         
         results = []
-        for i, img_path in enumerate(images):
-            print(f"Processing {i+1}/{len(images)}: {img_path.name}")
-            result = self.process_with_detailed_metrics(img_path, detector)
-            results.append(result)
         
-        if create_visualizations:
-            print("\n=== STEP 3: Creating visualizations ===")
-            self._create_visualizations(results, created_images, output_path, downscale_size)
+        for i, img_path in tqdm(enumerate(images), total=len(images), desc="Running detection", unit="img"):
+            try:
+                result = self.process_with_detailed_metrics(img_path, detector)
+                results.append(result)
+            except Exception as e:
+                tqdm.write(f"Error processing {img_path.name}: {e}")
+                results.append({'file_name': img_path.name, 'error': str(e), 'detected': False})
         
-        print("\n=== STEP 4: Analyzing results ===")
+        detection_count = sum(1 for r in results if r.get('detected', False))
+        print(f"\n✅ Detection phase completed: {detection_count}/{len(images)} flagged as resampled")
+        
+        print("\n=== STEP 3: Analyzing results ===")
         analysis_results = AnalysisReports.analyze_scaling_results(created_images, results, output_path)
         
-        print("\n=== STEP 5: Creating analysis report ===")
+        print("\n=== STEP 4: Creating analysis report ===")
         AnalysisReports.create_scaling_report(analysis_results, output_path)
         
-        print(f"\nScaling test completed! Results in: {output_path}")
-        if 'overall_detection_rate' in analysis_results:
-            print(f"Overall detection rate: {analysis_results['overall_detection_rate']:.3f}")
+        if create_visualizations:
+            print("\n=== STEP 5: Creating visualizations ===")
+            self.create_visualizations(results, created_images, output_path, downscale_size)
+        
+        print(f"\n🎉 Scaling test completed! Results in: {output_path}")
+        print(f"📊 Summary: {detection_count}/{len(images)} images flagged as resampled")
+        
         return analysis_results
 
-    def _create_visualizations(self, results, created_images, output_path, downscale_size):
+    def create_visualizations(self, results, created_images, output_path, downscale_size):
         vis_folder = output_path / 'visualizations'
         self.file_handler.create_output_folder(vis_folder)
         
+        file_path_lookup = {Path(img['file_path']).name: img['file_path'] for img in created_images}
+        valid_results = [result for result in results if 'error' not in result and result['p_map'] is not None]
+        
         results_by_image = {}
-        for result in results:
-            if 'error' not in result and result['p_map'] is not None:
-                filename = result['file_name']
-                if '_scale' in filename:
-                    original_name = filename.split('_scale')[0]
-                elif '_original' in filename:
-                    original_name = filename.split('_original')[0]
-                else:
-                    original_name = filename.split('.')[0]
-                
-                if original_name not in results_by_image:
-                    results_by_image[original_name] = []
-                results_by_image[original_name].append(result)
+        for result in valid_results:
+            filename = result['file_name']
+            if '_scale' in filename:
+                original_name = filename.split('_scale')[0]
+            elif '_original' in filename:
+                original_name = filename.split('_original')[0]
+            else:
+                original_name = filename.split('.')[0]
+            
+            if original_name not in results_by_image:
+                results_by_image[original_name] = []
+            results_by_image[original_name].append(result)
         
-        print(f"Creating visualizations for {len(results_by_image)} original images")
-        
-        visualization_count = 0
-        for original_name, image_results in results_by_image.items():
+        for original_name in results_by_image.keys():
             image_vis_folder = vis_folder / original_name
             self.file_handler.create_output_folder(image_vis_folder)
-            
+        
+        visualization_count = 0
+        errors_count = 0
+        total_items = sum(len(image_results) for image_results in results_by_image.items())
+        
+        progress_items = []
+        for original_name, image_results in results_by_image.items():
             for result in image_results:
-                try:
-                    filename = result['file_name']
+                progress_items.append((original_name, result))
+        
+        for original_name, result in tqdm(progress_items, desc="Creating visualizations", unit="viz"):
+            try:
+                image_vis_folder = vis_folder / original_name
+                filename = result['file_name']
+                
+                if '_scale' in filename:
+                    scale_part = filename.split('_scale')[1]
+                    parts = scale_part.split('_')
+                    scaling_factor = float(parts[0]) if len(parts) >= 2 else 1.0
+                    interpolation_method = parts[1].split('.')[0] if len(parts) >= 2 else 'unknown'
+                else:
                     scaling_factor = 1.0
                     interpolation_method = 'original'
-                    
-                    if '_scale' in filename:
-                        parts = filename.split('_scale')[1].split('_')
-                        if len(parts) >= 2:
-                            scaling_factor = float(parts[0])
-                            interpolation_method = parts[1].split('.')[0]
-                    elif '_original' in filename:
-                        scaling_factor = 1.0
-                        interpolation_method = 'original'
-                    
-                    file_path = None
-                    for created_image in created_images:
-                        if Path(created_image['file_path']).name == filename:
-                            file_path = created_image['file_path']
-                            break
-                    
-                    create_scaling_visualization(
-                        result['file_name'],
-                        result['p_map'],
-                        result['spectrum'],
-                        result['prediction_error'],
-                        result['detected'],
-                        scaling_factor,
-                        interpolation_method,
-                        result['detailed_metrics'],
-                        image_vis_folder,
-                        file_path,
-                        crop_center=self.crop_center,
-                        downscale_size=downscale_size
-                    )
-                    visualization_count += 1
-                except Exception as e:
-                    print(f"    Warning: Could not create visualization for {result['file_name']}: {e}")
+                
+                file_path = file_path_lookup.get(filename)
+                
+                create_scaling_visualization(
+                    result['file_name'],
+                    result['p_map'],
+                    result['spectrum'],
+                    result['prediction_error'],
+                    result['detected'],
+                    scaling_factor,
+                    interpolation_method,
+                    result['detailed_metrics'],
+                    image_vis_folder,
+                    file_path,
+                    crop_center=self.crop_center,
+                    downscale_size=downscale_size
+                )
+                visualization_count += 1
+                
+            except Exception as e:
+                errors_count += 1
+                tqdm.write(f"⚠️ Viz error {filename}: {e}")
         
-        print(f"Created {visualization_count} visualizations")
+        print(f"\n✅ Created {visualization_count} visualizations ({errors_count} errors)")
+        return visualization_count, errors_count
 
 def run_scaling_test(input_folder, scaling_factors=None, sensitivity='medium', output_folder=None, detector_class=None, create_visualizations=True, downscale_size=512, downscale=True, crop_center=False):
     test_suite = ScalingTestSuite(scaling_factors=scaling_factors, crop_center=crop_center)
