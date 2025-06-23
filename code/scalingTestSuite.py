@@ -93,7 +93,7 @@ class ScalingTestSuite:
                         try:
                             new_h, new_w = int(orig_h * scale_factor), int(orig_w * scale_factor)
                             
-                            if scale_factor < 1.0:
+                            if scale_factor < 3.0:
                                 scaled_img = cv2.resize(img, (new_w, new_h), interpolation=interp_method)
                                 final_img = scaled_img
                             else:

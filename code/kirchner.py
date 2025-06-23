@@ -28,9 +28,9 @@ class KirchnerDetector:
         self.file_handler = FileHandler(downscale_size, downscale)
         
         sensitivity_params = {
-            'low':    {'gradient_threshold': 0.004}, 
-            'medium': {'gradient_threshold': 0.009},  
-            'high':   {'gradient_threshold': 0.015}    
+            'low':    {'gradient_threshold': 0.010}, 
+            'medium': {'gradient_threshold': 0.011},  
+            'high':   {'gradient_threshold': 0.030}    
         }
 
         params = sensitivity_params.get(sensitivity, sensitivity_params['medium'])
@@ -100,70 +100,63 @@ class KirchnerDetector:
         p_map = self.lambda_param * np.exp(-(abs_error ** self.tau) / self.sigma)
         return p_map
 
-    def compute_spectrum(self, p_map):
-        kernel_size = 9
-        kernel = np.ones((kernel_size, kernel_size), dtype=np.float32) / (kernel_size**2)
-        local_mean = convolve(p_map, kernel, mode='reflect')
-        contrast_p_map = p_map - local_mean
+    def compute_spectrum(self, p_map, gamma=0.8):
+        p_map_zero_mean = p_map - np.mean(p_map)
         
-        contrast_p_map = np.sign(contrast_p_map) * np.abs(contrast_p_map) ** 0.8
-        contrast_p_map = contrast_p_map - np.mean(contrast_p_map)
+        # DFT computation
+        fft_result = fft2(p_map_zero_mean)
+        magnitude_spectrum = np.abs(fftshift(fft_result))
         
-        h, w = contrast_p_map.shape
-        window_h = np.hanning(h).reshape(-1, 1)
-        window_w = np.hanning(w).reshape(1, -1)
-        window = window_h * window_w
-        windowed_p_map = contrast_p_map * window
+        # Contrast function: radial weighting window (attenuates low frequencies)
+        h, w = p_map.shape
+        center_h, center_w = h // 2, w // 2
+        y_coords, x_coords = np.mgrid[-center_h:h-center_h, -center_w:w-center_w]
+        radial_dist = np.sqrt(y_coords**2 + x_coords**2)
+        max_radius = np.max(radial_dist)
         
-        fft_result = fft2(windowed_p_map)
-        spectrum = np.abs(fftshift(fft_result))
+        # Radial weighting (higher weights for higher frequencies)
+        if max_radius > 0:
+            radial_weight = radial_dist / max_radius
+        else:
+            radial_weight = np.ones_like(radial_dist)
         
-        if np.max(spectrum) > 0:
-            spectrum = spectrum / np.max(spectrum)
+        weighted_spectrum = magnitude_spectrum * radial_weight
+        gamma_corrected = weighted_spectrum ** gamma
         
-        return spectrum
+        return gamma_corrected
 
     def detect_cumulative_periodogram(self, spectrum):
+        # Remove DC component at center
         spectrum = spectrum.copy()
         h, w = spectrum.shape
         center_h, center_w = h // 2, w // 2
         spectrum[center_h, center_w] = 0
         
+        #First quadrant of a p-map's DFT (0 ≤ f ≤ b)"
         first_quadrant = spectrum[center_h:, center_w:]
         
+        # Equation 23: C(f) = sum|P(f')|^2 / sum_total|P(f')|^2
         energy = first_quadrant ** 2
         total_energy = np.sum(energy)
         
         if total_energy == 0:
-            return False, 0.0, np.zeros_like(first_quadrant)
+            return False, 0.0
         
-        h_quad, w_quad = first_quadrant.shape
-        y_coords, x_coords = np.meshgrid(np.arange(h_quad), np.arange(w_quad), indexing='ij')
+        cumulative_matrix = np.zeros_like(energy)
+        for i in range(energy.shape[0]):
+            for j in range(energy.shape[1]):
+                cumulative_matrix[i, j] = np.sum(energy[:i+1, :j+1])
         
-        radial_dist = np.sqrt(x_coords**2 + y_coords**2)
-        max_dist = np.sqrt((h_quad-1)**2 + (w_quad-1)**2)
-        radial_dist_norm = radial_dist / max_dist
+        C_matrix = cumulative_matrix / total_energy
         
-        flat_energy = energy.flatten()
-        flat_radial = radial_dist_norm.flatten()
-        
-        sort_indices = np.argsort(flat_radial)
-        sorted_energy = flat_energy[sort_indices]
-        
-        cumulative_energy = np.cumsum(sorted_energy)
-        C_values = cumulative_energy / total_energy
-        
-        C_2d = np.zeros_like(energy)
-        for i, idx in enumerate(sort_indices):
-            row, col = idx // w_quad, idx % w_quad
-            C_2d[row, col] = C_values[i]
-        
-        grad_y, grad_x = np.gradient(C_2d)
+        # Equation 24: delta' = max |delta C(f)|
+        grad_y, grad_x = np.gradient(C_matrix)
         gradient_magnitude = np.sqrt(grad_x**2 + grad_y**2)
-        max_grad = np.max(gradient_magnitude)
+        max_gradient = np.max(gradient_magnitude)
         
-        detected = max_grad > self.gradient_threshold
-        return detected, max_grad, gradient_magnitude
+        detected = max_gradient > self.gradient_threshold
+        
+        return detected, max_gradient, gradient_magnitude
 
     def extract_detection_metrics(self, spectrum):
         gradient_detected, max_gradient, gradient_map = self.detect_cumulative_periodogram(spectrum)

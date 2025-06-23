@@ -47,64 +47,40 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
         if file_path_obj.exists():
             search_paths.insert(0, str(file_path_obj))
     
-    found_image_path = None
-    
-    if image_file_path and Path(image_file_path).exists():
-        found_image_path = image_file_path
-    else:
-        found_image_path = file_handler.find_image_file(filename, search_paths)
-        
-        if not found_image_path:
-            base_name = Path(filename).stem
-            extensions = ['.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp', '.webp']
-            for ext in extensions:
-                found_image_path = file_handler.find_image_file(base_name + ext, search_paths)
-                if found_image_path:
-                    break
-    
-    if found_image_path:
-        try:
-            img_array = file_handler.load_image_rgb(found_image_path, target_size=None, apply_downscale=True)
-            ax1.imshow(img_array)
-            ax1.set_aspect('equal')  
-        except Exception as e:
-            print(f"    Warning: Image load failed for {filename}: {e}")
-            ax1.text(0.5, 0.5, f'Image load failed:\n{filename}\n({str(e)[:30]}...)', ha='center', va='center',
-                    transform=ax1.transAxes, fontsize=10, bbox=dict(boxstyle="round", facecolor='wheat'))
-    else:
-        print(f"    Warning: Image not found for visualization: {filename}")
-        ax1.text(0.5, 0.5, f'Image not found:\n{filename}\nSearched in:\n{search_paths[:3]}', ha='center', va='center',
-                transform=ax1.transAxes, fontsize=10, bbox=dict(boxstyle="round", facecolor='wheat'))
-    
+    found_image_path = file_handler.find_image_file(filename, search_paths)
+    img_array = file_handler.load_image_rgb(found_image_path, target_size=None, apply_downscale=True)
+    ax1.imshow(img_array)
+    ax1.set_aspect('equal')  
     ax1.set_title('Original Image', fontsize=12, fontweight='bold')
     ax1.axis('off')
     
     # Panel 2: P-Map
     ax2 = fig.add_subplot(gs[0, 1])
-    p_map_enhanced = np.clip(p_map, 0, 1)
-    gamma = 0.8
-    p_map_dark = np.power(p_map_enhanced, gamma)
-    
-    im2 = ax2.imshow(p_map_dark, cmap='binary_r', vmin=0, vmax=1, aspect='equal')
+
+    im2 = ax2.imshow(p_map, cmap='binary_r', vmin=0, vmax=1, aspect='equal')
     ax2.set_title('P-Map (Equation 21)', fontsize=12, fontweight='bold')
     plt.colorbar(im2, ax=ax2, shrink=0.8)
     
     # Panel 3: Frequency Spectrum
     ax3 = fig.add_subplot(gs[0, 2])
     rows, cols = spectrum.shape
+    
     freq_x = np.linspace(-0.5, 0.5, cols)
     freq_y = np.linspace(-0.5, 0.5, rows)
-    
     spectrum_processed = spectrum.copy()
     spectrum_min = spectrum_processed[spectrum_processed > 0].min() if np.any(spectrum_processed > 0) else 1e-10
     spectrum_log = np.log10(spectrum_processed + spectrum_min)
     spectrum_log_min = spectrum_log.min()
     spectrum_log_max = spectrum_log.max()
     
+    plot_extent = [freq_x[0], freq_x[-1], freq_y[0], freq_y[-1]]
+    
     im3 = ax3.imshow(spectrum_log, cmap='binary_r',
-                    vmin=spectrum_log_min, vmax=spectrum_log_max * 0.1,
-                    extent=[freq_x[0], freq_x[-1], freq_y[-1], freq_y[0]],
-                    origin='lower', aspect='equal')
+                     vmin=spectrum_log_min, vmax=spectrum_log_max,
+                     extent=plot_extent,
+                     origin='lower',
+                     aspect='equal')
+    
     ax3.set_title('Frequency Spectrum', fontsize=12, fontweight='bold')
     ax3.set_xlabel('Normalized Frequency f_x')
     ax3.set_ylabel('Normalized Frequency f_y')

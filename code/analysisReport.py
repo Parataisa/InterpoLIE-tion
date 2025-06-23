@@ -136,7 +136,7 @@ class AnalysisReports:
             ax.axvline(x=1.0, color='black', linestyle='--', alpha=0.6, linewidth=1.5)
             ax.set_ylim(-0.05, 1.05)
             
-            ax.axvspan(0.5, 1.0, alpha=0.1, color='red', label='_downscaled')
+            ax.axvspan(min(scaling_df['scaling_factor']), 1.0, alpha=0.1, color='red', label='_downscaled')
             ax.axvspan(1.0, max(scaling_df['scaling_factor']), alpha=0.1, color='blue', label='_upscaled')
 
     @staticmethod
@@ -192,16 +192,14 @@ class AnalysisReports:
                 ax.set_ylabel('Interpolation Method', fontsize=12, fontweight='bold')
                 ax.set_title('Detection Rate Heatmap', fontsize=14, fontweight='bold')
                 
-                # Add text annotations
                 for i in range(len(pivot_data.index)):
                     for j in range(len(pivot_data.columns)):
                         value = pivot_data.values[i, j]
                         if np.isnan(value):
-                            text = 'nan'
-                            text_color = 'gray'
+                            continue
                         else:
                             text = f'{value:.2f}'
-                            text_color = 'white' if value < 0.5 else 'black'
+                            text_color = 'black'
                         
                         ax.text(j, i, text, ha="center", va="center", 
                                 color=text_color, fontsize=10, fontweight='bold',
