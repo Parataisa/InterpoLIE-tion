@@ -12,7 +12,7 @@ warnings.filterwarnings('ignore', message='This figure includes Axes that are no
 matplotlib.use('Agg')  
 
 
-def create_unified_visualization(result_data, output_path, visualization_type='batch'):
+def create_unified_visualization(result_data, output_path, visualization_type='batch', crop_center=False):
     filename = result_data['file_name']
     detected = result_data['detected']
     p_map = result_data['p_map']
@@ -45,8 +45,7 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
     image_loaded = False
     image_file_path = result_data.get('file_path', '')
     
-    # Initialize file handler for image loading
-    file_handler = FileHandler()
+    file_handler = FileHandler(crop_center=crop_center)
     
     search_paths = ['.', 'img', '../img', '../../img']
     if image_file_path:
@@ -58,16 +57,8 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
         try:
             img_array = file_handler.load_image_rgb(found_image_path, target_size)
             ax1.imshow(img_array)
-            image_loaded = True
         except Exception as e:
             print(f"Warning: Could not load image using FileHandler: {e}")
-    
-    if not image_loaded:
-        print(f"Warning: Could not load original image for {filename}, using prediction error as fallback")
-        prediction_error_resized = cv2.resize(prediction_error.astype(np.float32), 
-                                            target_size, interpolation=cv2.INTER_LINEAR)
-        error_range = np.percentile(prediction_error_resized, [1, 99])
-        ax1.imshow(prediction_error_resized, cmap='gray', vmin=error_range[0], vmax=error_range[1])
     
     ax1.set_title('Original Image', fontsize=12, fontweight='bold')
     ax1.axis('off')
@@ -156,17 +147,17 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
     return str(output_path)
 
 
-def create_batch_visualization(result, vis_folder):
+def create_batch_visualization(result, vis_folder, crop_center=False):
     filename = result['file_name']
     base_name = filename.split('.')[0]
     output_path = vis_folder / f'{base_name}_analysis.png'
     
-    return create_unified_visualization(result, output_path, visualization_type='batch')
+    return create_unified_visualization(result, output_path, visualization_type='batch', crop_center=crop_center)
 
 
 def create_scaling_visualization(filename, p_map, spectrum, prediction_error, detected, 
                                scaling_factor, interpolation_method, detailed_metrics, 
-                               output_folder, file_path=None):
+                               output_folder, file_path=None, crop_center=False):
     base_name = filename.split('.')[0]
     output_path = output_folder / f'{base_name}_scale{scaling_factor:.1f}_{interpolation_method}_analysis.png'
     
@@ -182,7 +173,7 @@ def create_scaling_visualization(filename, p_map, spectrum, prediction_error, de
         'interpolation': interpolation_method
     }
     
-    return create_unified_visualization(result_data, output_path, visualization_type='scaling')
+    return create_unified_visualization(result_data, output_path, visualization_type='scaling', crop_center=crop_center)
 
 
 def create_comparison_visualization(results_list, output_path, title="Detection Comparison"):

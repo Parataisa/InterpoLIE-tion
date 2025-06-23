@@ -13,11 +13,12 @@ from fileHandler import FileHandler
 IMAGE_FOLDER_PATH = 'img'
 DOWNSCALE_SIZE = 512  
 DOWNSCALE = True
+CROP_CENTER = True
 SCALING_VISUALIZATION= True
 
 def run_scaling_test(input_folder, scaling_factors=None, sensitivity='medium', output_folder=None, create_visualizations=True, downscale_size=512, downscale=True):
     try:
-        test_suite = ScalingTestSuite(scaling_factors=scaling_factors)
+        test_suite = ScalingTestSuite(scaling_factors=scaling_factors, crop_center=CROP_CENTER)
         return test_suite.run_scaling_test(input_folder, output_folder, sensitivity, KirchnerDetector, create_visualizations, downscale_size, downscale)
     except Exception as e:
         print(f"Error running scaling test: {e}")
@@ -43,7 +44,7 @@ def run_demo(sensitivity='medium', downscale_size=1024, downscale=True):
     print("\n=== Batch Processing with Gradient-Focused Analysis ===")
     output_folder_batch = Path(root_demo_folder) / 'batch_results'
     try:
-        results_batch = quick_scan(IMAGE_FOLDER_PATH, str(output_folder_batch), sensitivity=sensitivity, downscale_size=downscale_size, downscale=downscale)
+        results_batch = quick_scan(IMAGE_FOLDER_PATH, str(output_folder_batch), sensitivity=sensitivity, downscale_size=downscale_size, downscale=downscale, crop_center=CROP_CENTER)
         print(f"✓ Batch processing completed! Results in: {output_folder_batch}")
         print(f"✓ Gradient-focused analysis: {output_folder_batch}/detailed_batch_analysis_report.png")
         if not results_batch.empty:

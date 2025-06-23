@@ -13,13 +13,14 @@ matplotlib.use('Agg')
 
 class BatchProcessor:
     def __init__(self, input_folder, output_folder, sensitivity='medium', max_workers=24, 
-                 downscale_size=512, downscale=True):
+                 downscale_size=512, downscale=True, crop_center=False):
         self.input_folder = Path(input_folder)
         self.output_folder = Path(output_folder)
         self.sensitivity = sensitivity
         self.max_workers = max_workers 
         
-        self.file_handler = FileHandler(downscale_size, downscale)
+        self.crop_center = crop_center
+        self.file_handler = FileHandler(downscale_size, downscale, crop_center=crop_center)
         self.file_handler.create_output_folder(self.output_folder)
 
     def scan_images(self):
@@ -131,7 +132,7 @@ class BatchProcessor:
         for result in results:
             if 'error' not in result and 'p_map' in result and result['p_map'] is not None:
                 try:
-                    create_batch_visualization(result, vis_folder)
+                    create_batch_visualization(result, vis_folder, self.crop_center)
                 except Exception as e:
                     print(f"Warning: Could not create visualization for {result['file_name']}: {e}")
         
@@ -381,10 +382,10 @@ class BatchProcessor:
         print(f"Results: {csv_path}")
 
 
-def quick_scan(input_folder, output_folder=None, sensitivity='medium', downscale_size=512, downscale=True):
+def quick_scan(input_folder, output_folder=None, sensitivity='medium', downscale_size=512, downscale=True, crop_center=False):
     if output_folder is None:
         timestamp = time.strftime('%Y%m%d_%H%M%S')
         output_folder = f"results"
 
-    processor = BatchProcessor(input_folder, output_folder, sensitivity, 24, downscale_size, downscale)
+    processor = BatchProcessor(input_folder, output_folder, sensitivity, 24, downscale_size, downscale, crop_center=crop_center)
     return processor.process_batch()

@@ -5,10 +5,11 @@ from pathlib import Path
 from PIL import Image
 
 class FileHandler:
-    def __init__(self, downscale_size=512, downscale=True):
+    def __init__(self, downscale_size=512, downscale=True, crop_center=False):
         self.downscale_size = downscale_size
         self.downscale = downscale
         self.supported_formats = {'.jpg', '.jpeg', '.png', '.tiff', '.tif', '.bmp', '.webp'}
+        self.crop_center = crop_center
     
     def scan_folder(self, folder_path):
         folder = Path(folder_path)
@@ -30,10 +31,26 @@ class FileHandler:
             
             if should_downscale:
                 h, w = img.shape[:2]
-                if w > self.downscale_size:
-                    scale_factor = self.downscale_size / w
-                    new_h, new_w = int(h * scale_factor), int(w * scale_factor)
-                    img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
+                
+                if self.crop_center:
+                    print(f"    Cropping center of image {img_path} to size {self.downscale_size}x{self.downscale_size}")
+                    crop_size = self.downscale_size
+                    
+                    if h >= crop_size and w >= crop_size:
+                        center_x, center_y = w // 2, h // 2
+                        
+                        left = center_x - crop_size // 2
+                        right = center_x + crop_size // 2
+                        top = center_y - crop_size // 2
+                        bottom = center_y + crop_size // 2
+                        
+                        img = img[top:bottom, left:right]
+                else:
+                    if w > self.downscale_size:
+                        print(f"    Downscaling image {img_path} from {w} to {self.downscale_size} pixels wide")
+                        scale_factor = self.downscale_size / w
+                        new_h, new_w = int(h * scale_factor), int(w * scale_factor)
+                        img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
             
             return img.astype(np.float32)
             
@@ -45,8 +62,27 @@ class FileHandler:
             img = Image.open(img_path).convert('RGB')
             img_array = np.array(img)
             
-            if target_size:
-                img_array = cv2.resize(img_array, target_size, interpolation=cv2.INTER_LINEAR)
+            h, w = img_array.shape[:2]
+            
+            if self.crop_center:
+                print(f"    Cropping center of image {img_path} to size {self.downscale_size}x{self.downscale_size}")
+                crop_size = self.downscale_size
+                
+                if h >= crop_size and w >= crop_size:
+                    center_x, center_y = w // 2, h // 2
+                    
+                    left = center_x - crop_size // 2
+                    right = center_x + crop_size // 2
+                    top = center_y - crop_size // 2
+                    bottom = center_y + crop_size // 2
+                    
+                    img_array = img_array[top:bottom, left:right]
+            else:
+                if w > self.downscale_size:
+                    print(f"    Downscaling image {img_path} from {w} to {self.downscale_size} pixels wide")
+                    scale_factor = self.downscale_size / w
+                    new_h, new_w = int(h * scale_factor), int(w * scale_factor)
+                    img_array = cv2.resize(img_array, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
             
             return img_array
             

@@ -18,9 +18,10 @@ from visualizations import create_scaling_visualization
 from fileHandler import FileHandler
 
 class ScalingTestSuite:
-    def __init__(self, scaling_factors=None, interpolation_methods=None):
+    def __init__(self, scaling_factors=None, interpolation_methods=None, crop_center=False):
         self.scaling_factors = scaling_factors or [0.5, 0.8, 1.2, 1.6, 2.0]
-        self.file_handler = FileHandler()
+        self.file_handler = FileHandler(crop_center=crop_center)
+        self.crop_center = crop_center
             
         self.interpolation_methods = {
             'nearest': cv2.INTER_NEAREST,
@@ -33,9 +34,7 @@ class ScalingTestSuite:
         input_path = Path(input_folder)
         output_path = Path(output_folder)
         self.file_handler.create_output_folder(output_path)
-        
-        source_handler = FileHandler(source_downscale_size, source_downscale)
-        images = source_handler.scan_folder(input_folder)
+        images = self.file_handler.scan_folder(input_folder)
         
         print(f"Creating scaled versions of {len(images)} images...")
         print(f"Initial downscaling: {'Enabled' if source_downscale else 'Disabled'} (target: {source_downscale_size}px)")
@@ -45,23 +44,7 @@ class ScalingTestSuite:
         for img_idx, img_path in enumerate(images):
             print(f"Processing image {img_idx + 1}/{len(images)}: {img_path.name}")
             try:
-                if source_downscale:
-                    img = cv2.imread(str(img_path), cv2.IMREAD_COLOR)
-                    if img is None:
-                        print(f"  Could not load {img_path.name}, skipping...")
-                        continue
-                    
-                    h, w = img.shape[:2]
-                    if w > source_downscale_size:
-                        scale_factor = source_downscale_size / w
-                        new_h, new_w = int(h * scale_factor), int(w * scale_factor)
-                        img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
-                        print(f"  Initial downscaling applied: {w}x{h} -> {new_w}x{new_h}")
-                else:
-                    img = cv2.imread(str(img_path), cv2.IMREAD_COLOR)
-                    if img is None:
-                        print(f"  Could not load {img_path.name}, skipping...")
-                        continue
+                img = self.file_handler.load_image(img_path, apply_downscale=source_downscale)
                 
                 original_name = img_path.stem
                 original_ext = img_path.suffix
@@ -235,7 +218,8 @@ class ScalingTestSuite:
                             interpolation_method,
                             result['detailed_metrics'],
                             image_vis_folder,
-                            file_path
+                            file_path,
+                            crop_center=self.crop_center
                         )
                         visualization_count += 1
                     except Exception as e:
