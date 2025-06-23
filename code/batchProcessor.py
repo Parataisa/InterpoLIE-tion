@@ -30,12 +30,16 @@ class BatchProcessor:
             print(f"  Processing: {img_path.name}")
             start_time = time.time()
             
+            image = self.file_handler.load_image(img_path)
+            print(f"    Image loaded and downscaled, size: {image.shape}")
+            
             from kirchner import KirchnerDetector
             
             detector = KirchnerDetector(sensitivity=self.sensitivity, 
                                         downscale_size=self.file_handler.downscale_size, 
-                                        downscale=self.file_handler.downscale)
-            result = detector.detect(str(img_path))
+                                        downscale=False) 
+            
+            result = detector.detect(image, skip_internal_downscale=True)
             
             detailed_metrics = detector.extract_detection_metrics(result['spectrum'])
             detector_info = detector.get_detector_info()
@@ -80,6 +84,7 @@ class BatchProcessor:
         images = self.scan_images()
         
         print(f"Found {len(images)} images to process")
+        print(f"Downscaling: {'Enabled' if self.file_handler.downscale else 'Disabled'} (target: {self.file_handler.downscale_size}px)")
 
         if not images:
             return pd.DataFrame()

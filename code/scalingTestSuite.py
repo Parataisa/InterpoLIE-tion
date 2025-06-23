@@ -29,31 +29,46 @@ class ScalingTestSuite:
             'lanczos': cv2.INTER_LANCZOS4
         }
 
-    def create_scaled_images(self, input_folder, output_folder):
+    def create_scaled_images(self, input_folder, output_folder, source_downscale_size=512, source_downscale=True):
         input_path = Path(input_folder)
         output_path = Path(output_folder)
         self.file_handler.create_output_folder(output_path)
         
-        images = self.file_handler.scan_folder(input_folder)
+        source_handler = FileHandler(source_downscale_size, source_downscale)
+        images = source_handler.scan_folder(input_folder)
         
         print(f"Creating scaled versions of {len(images)} images...")
+        print(f"Initial downscaling: {'Enabled' if source_downscale else 'Disabled'} (target: {source_downscale_size}px)")
         
         created_images = []
         
         for img_idx, img_path in enumerate(images):
             print(f"Processing image {img_idx + 1}/{len(images)}: {img_path.name}")
             try:
-                img = cv2.imread(str(img_path), cv2.IMREAD_COLOR)
-                if img is None:
-                    print(f"  Could not load {img_path.name}, skipping...")
-                    continue
+                if source_downscale:
+                    img = cv2.imread(str(img_path), cv2.IMREAD_COLOR)
+                    if img is None:
+                        print(f"  Could not load {img_path.name}, skipping...")
+                        continue
+                    
+                    h, w = img.shape[:2]
+                    if w > source_downscale_size:
+                        scale_factor = source_downscale_size / w
+                        new_h, new_w = int(h * scale_factor), int(w * scale_factor)
+                        img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
+                        print(f"  Initial downscaling applied: {w}x{h} -> {new_w}x{new_h}")
+                else:
+                    img = cv2.imread(str(img_path), cv2.IMREAD_COLOR)
+                    if img is None:
+                        print(f"  Could not load {img_path.name}, skipping...")
+                        continue
+                
                 original_name = img_path.stem
                 original_ext = img_path.suffix
                 
                 image_folder = output_path / original_name
                 self.file_handler.create_output_folder(image_folder)
                 
-                # Save original
                 original_copy = image_folder / f"{original_name}_original{original_ext}"
                 cv2.imwrite(str(original_copy), img)
                 created_images.append({
@@ -65,7 +80,6 @@ class ScalingTestSuite:
                 })
 
                 h, w = img.shape[:2]
-                # Create scaled versions
                 for scale_factor in self.scaling_factors:
                     for interp_name, interp_method in self.interpolation_methods.items():
                         new_h, new_w = int(h * scale_factor), int(w * scale_factor)
@@ -98,7 +112,14 @@ class ScalingTestSuite:
         try:
             start_time = time.time()
             
-            result = detector.detect(str(img_path))
+            img = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
+            if img is None:
+                raise IOError(f"Could not load image: {img_path}")
+                
+            img = img.astype(np.float32)
+            print(f"      Processing scaled image, size: {img.shape}")
+            
+            result = detector.detect(img, skip_internal_downscale=True)
             detailed_metrics = detector.extract_detection_metrics(result['spectrum'])
             
             processing_time = time.time() - start_time
@@ -128,10 +149,11 @@ class ScalingTestSuite:
         output_path = Path(output_folder)
         self.file_handler.create_output_folder(output_path)
         
-        # Step 1: Create scaled test images
+        # Step 1: Create scaled test images with initial downscaling
         print("=== STEP 1: Creating scaled test images ===")
         scaled_images_folder = output_path / 'scaled_images'
-        created_images, scaled_folder = self.create_scaled_images(input_folder, scaled_images_folder)
+        created_images, scaled_folder = self.create_scaled_images(input_folder, scaled_images_folder, 
+                                                                  downscale_size, downscale)
         
         # Step 2: Run detection
         print("\n=== STEP 2: Running Kirchner detection ===")
@@ -140,8 +162,9 @@ class ScalingTestSuite:
             from kirchner import KirchnerDetector
             detector_class = KirchnerDetector
             
-        detector = detector_class(sensitivity=sensitivity, downscale_size=downscale_size, downscale=downscale)
+        detector = detector_class(sensitivity=sensitivity, downscale_size=downscale_size, downscale=False)
         print(f"Using detector with sensitivity: {sensitivity}")
+        print(f"Detector downscaling: Disabled (images pre-processed)")
         
         images = self.file_handler.scan_folder(scaled_folder)
         

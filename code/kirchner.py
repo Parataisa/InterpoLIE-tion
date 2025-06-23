@@ -43,11 +43,15 @@ class KirchnerDetector:
         self.gradient_threshold = params['gradient_threshold']
         self.sensitivity = sensitivity
 
-    def detect(self, img_path):
+    def detect(self, img_input, skip_internal_downscale=False):
         try:
-            print(f"      Loading image: {Path(img_path).name}")
-            image = self.file_handler.load_image(img_path)
-            print(f"      Image loaded, size: {image.shape}")
+            if isinstance(img_input, (str, Path)):
+                print(f"      Loading image: {Path(img_input).name}")
+                image = self.file_handler.load_image(img_input, apply_downscale=not skip_internal_downscale)
+                print(f"      Image loaded, size: {image.shape}")
+            else:
+                image = img_input.astype(np.float32)
+                print(f"      Using pre-loaded image, size: {image.shape}")
             
             print(f"      Running Kirchner detection...")
             results = self.detect_resampling_fast(image)

@@ -11,8 +11,9 @@ from scalingTestSuite import ScalingTestSuite
 from fileHandler import FileHandler
 
 IMAGE_FOLDER_PATH = 'img'
-DOWNSCALE_SIZE = 256  
-DOWNSCALE = True       
+DOWNSCALE_SIZE = 512  
+DOWNSCALE = True
+SCALING_VISUALIZATION= True
 
 def run_scaling_test(input_folder, scaling_factors=None, sensitivity='medium', output_folder=None, create_visualizations=True, downscale_size=512, downscale=True):
     try:
@@ -62,7 +63,7 @@ def run_demo(sensitivity='medium', downscale_size=1024, downscale=True):
                                          scaling_factors=demo_scaling_factors,
                                          sensitivity=sensitivity,
                                          output_folder=str(scaling_output),
-                                         create_visualizations=False,
+                                         create_visualizations=SCALING_VISUALIZATION,
                                          downscale_size=downscale_size,
                                          downscale=downscale)
     except Exception as e:
