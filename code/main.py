@@ -25,7 +25,6 @@ def run_demo(sensitivity='medium'):
         return None
         
     print("Running Kirchner Fast Resampling Detector Demo")
-    print("Based on: Kirchner 2008 - Section 5 Fast Detection")
     
     print("\n" + "="*60)
     print("KIRCHNER RESAMPLING DETECTOR")
@@ -37,11 +36,13 @@ def run_demo(sensitivity='medium'):
     
     print(f"\n📁 All results will be saved to: {root_demo_folder}")
     
-    print("\n=== Batch Processing ===")
+    print("\n=== Batch Processing with Gradient-Focused Analysis ===")
     output_folder_batch = Path(root_demo_folder) / 'batch_results'
     try:
-        results_batch = quick_scan(IMAGE_FOLDER_PATH, str(output_folder_batch), sensitivity=sensitivity)
+        results_batch = quick_scan(IMAGE_FOLDER_PATH, str(output_folder_batch), 
+                                 sensitivity=sensitivity)
         print(f"✓ Batch processing completed! Results in: {output_folder_batch}")
+        print(f"✓ Gradient-focused analysis: {output_folder_batch}/detailed_batch_analysis_report.png")
         if not results_batch.empty:
             detected = results_batch['detected'].sum()
             total = len(results_batch)
@@ -51,29 +52,19 @@ def run_demo(sensitivity='medium'):
     except Exception as e:
         print(f"✗ Batch processing failed: {e}")
     
-    print("\n=== Scaling Test ===")
+    print("\n=== Scaling Test with Individual Data Analysis ===")
     scaling_output = Path(root_demo_folder) / 'scaling_test'
     try:
-        demo_scaling_factors = [0.5, 0.6, 0.7, 0.8, 0.9, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0]
+        demo_scaling_factors = [0.4, 0.5, 0.6, 0.8, 0.9, 1.1, 1.2, 1.4, 1.5, 1.6, 1.8, 2.0]
         results_scaling = run_scaling_test(IMAGE_FOLDER_PATH, 
                                          scaling_factors=demo_scaling_factors,
                                          sensitivity=sensitivity,
                                          output_folder=str(scaling_output),
-                                         create_visualizations=False)
-        if results_scaling:
-            print(f"✓ Scaling test completed! Results in: {scaling_output}")
-            if 'overall_detection_rate' in results_scaling:
-                print(f"✓ Overall detection rate: {results_scaling['overall_detection_rate']:.3f}")
-        else:
-            print("⚠ Scaling test not available or failed")
+                                         create_visualizations=True)
     except Exception as e:
         print(f"✗ Scaling test failed: {e}")
     
     print(f"\n🎯 Demo completed! All results organized in: {root_demo_folder}")
-    print(f"   📂 Batch results: {output_folder_batch}")
-    print(f"   📂 Scaling test: {scaling_output}")
-    
-    return root_demo_folder
 
 def main():
     run_demo(sensitivity='medium')

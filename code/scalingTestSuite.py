@@ -14,6 +14,7 @@ from scipy.fft import fft2, fftshift
 from scipy.ndimage import gaussian_filter, convolve
 from PIL import Image
 from matplotlib.colors import LogNorm
+from visualizations import create_scaling_visualization
 
 class ScalingTestSuite:
     def __init__(self, scaling_factors=None, interpolation_methods=None):
@@ -26,7 +27,7 @@ class ScalingTestSuite:
             'lanczos': cv2.INTER_LANCZOS4
         }
 
-    def create_scaled_images(self, input_folder, output_folder, downscale_size=256, downscale=True):
+    def create_scaled_images(self, input_folder, output_folder, downscale_size=512, downscale=True):
         input_path = Path(input_folder)
         output_path = Path(output_folder)
         output_path.mkdir(parents=True, exist_ok=True)
@@ -205,7 +206,14 @@ class ScalingTestSuite:
                             scaling_factor = 1.0
                             interpolation_method = 'original'
                         
-                        save_scaling_visualization(
+                        # Find the actual image file path
+                        file_path = None
+                        for created_image in created_images:
+                            if Path(created_image['file_path']).name == filename:
+                                file_path = created_image['file_path']
+                                break
+                        
+                        create_scaling_visualization(
                             result['file_name'],
                             result['p_map'],
                             result['spectrum'],
@@ -214,7 +222,8 @@ class ScalingTestSuite:
                             scaling_factor,
                             interpolation_method,
                             result['detailed_metrics'],
-                            image_vis_folder
+                            image_vis_folder,
+                            file_path
                         )
                         visualization_count += 1
                     except Exception as e:
@@ -297,226 +306,175 @@ class ScalingTestSuite:
         detailed_df = analysis_results['detailed_results']
         scaling_df = analysis_results['scaling_analysis']
         
-        fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+        fig, axes = plt.subplots(2, 2, figsize=(18, 14))
         fig.suptitle('Kirchner Detector: Scaling Factor Analysis', 
-                     fontsize=16, fontweight='bold')
+                     fontsize=18, fontweight='bold', y=0.98)
         
-        # Plot 1: Detection rate by scaling factor
+        # Plot 1: Detection Rate vs Scaling Factor 
         ax1 = axes[0, 0]
         if len(scaling_df) > 0:
-            colors = ['blue', 'red', 'green', 'orange', 'purple']
-            markers = ['o', 's', '^', 'D', 'v']
+            colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
+            markers = ['o', 's', '^', 'D', 'v', 'P']
+            linestyles = ['-', '--', '-.', ':', '-', '--']
             
             for i, interp_method in enumerate(scaling_df['interpolation'].unique()):
                 method_data = scaling_df[scaling_df['interpolation'] == interp_method]
                 color = colors[i % len(colors)]
                 marker = markers[i % len(markers)]
+                linestyle = linestyles[i % len(linestyles)]
+                
                 ax1.plot(method_data['scaling_factor'], method_data['detection_rate'], 
-                        marker=marker, linestyle='-', label=interp_method, 
-                        linewidth=2, markersize=8, color=color)
+                        marker=marker, linestyle=linestyle, label=interp_method, 
+                        linewidth=2.5, markersize=8, color=color, markeredgecolor='white',
+                        markeredgewidth=1, alpha=0.9)
             
-            ax1.set_xlabel('Scaling Factor')
-            ax1.set_ylabel('Detection Rate')
-            ax1.set_title('Detection Rate vs Scaling Factor')
-            ax1.legend()
-            ax1.grid(True, alpha=0.3)
-            ax1.axvline(x=1.0, color='black', linestyle='--', alpha=0.5)
+            ax1.set_xlabel('Scaling Factor', fontsize=12, fontweight='bold')
+            ax1.set_ylabel('Detection Rate', fontsize=12, fontweight='bold')
+            ax1.set_title('Detection Rate vs Scaling Factor', fontsize=14, fontweight='bold')
+            ax1.legend(frameon=True, fancybox=True, shadow=True, fontsize=10)
+            ax1.grid(True, alpha=0.4, linestyle='--')
+            ax1.axvline(x=1.0, color='black', linestyle='--', alpha=0.6, linewidth=1.5)
+            ax1.set_ylim(-0.05, 1.05)
+            
+            ax1.axvspan(0.5, 1.0, alpha=0.1, color='red', label='_downscaled')
+            ax1.axvspan(1.0, max(scaling_df['scaling_factor']), alpha=0.1, color='blue', label='_upscaled')
         
-        # Plot 2: Overall summary
+        # Plot 2: Detection Rate by Image Category
         ax2 = axes[0, 1]
         if len(detailed_df) > 0:
-            original_detected = detailed_df[detailed_df['category'] == 'original']['detected'].sum()
-            upscaled_detected = detailed_df[detailed_df['category'] == 'upscaled']['detected'].sum()
-            downscaled_detected = detailed_df[detailed_df['category'] == 'downscaled']['detected'].sum()
+            categories_data = {}
+            for category in ['original', 'upscaled', 'downscaled']:
+                cat_data = detailed_df[detailed_df['category'] == category]
+                if len(cat_data) > 0:
+                    detected = cat_data['detected'].sum()
+                    total = len(cat_data)
+                    categories_data[category] = {'detected': detected, 'total': total, 'rate': detected/total}
             
-            original_total = len(detailed_df[detailed_df['category'] == 'original'])
-            upscaled_total = len(detailed_df[detailed_df['category'] == 'upscaled'])
-            downscaled_total = len(detailed_df[detailed_df['category'] == 'downscaled'])
-            
-            categories = ['Original', 'Upscaled', 'Downscaled']
-            detection_rates = [
-                original_detected / max(original_total, 1),
-                upscaled_detected / max(upscaled_total, 1),
-                downscaled_detected / max(downscaled_total, 1)
-            ]
-            
-            bars = ax2.bar(categories, detection_rates, color=['gray', 'green', 'red'], alpha=0.7)
-            ax2.set_ylabel('Detection Rate')
-            ax2.set_title('Detection Rate by Image Category')
-            ax2.set_ylim(0, 1)
-            
-            for bar, rate in zip(bars, detection_rates):
-                height = bar.get_height()
-                ax2.text(bar.get_x() + bar.get_width()/2., height + 0.01,
-                        f'{rate:.2f}', ha='center', va='bottom')
+            if categories_data:
+                categories = list(categories_data.keys())
+                detection_rates = [categories_data[cat]['rate'] for cat in categories]
+                totals = [categories_data[cat]['total'] for cat in categories]
+                
+                colors_cat = {'original': '#808080', 'upscaled': '#2ca02c', 'downscaled': '#d62728'}
+                bar_colors = [colors_cat.get(cat, '#1f77b4') for cat in categories]
+                
+                bars = ax2.bar(categories, detection_rates, color=bar_colors, alpha=0.8, 
+                              edgecolor='white', linewidth=2)
+                ax2.set_ylabel('Detection Rate', fontsize=12, fontweight='bold')
+                ax2.set_title('Detection Rate by Image Category', fontsize=14, fontweight='bold')
+                ax2.set_ylim(0, 1.1)
+                ax2.grid(True, alpha=0.4, axis='y')
+                
+                for bar, rate, total in zip(bars, detection_rates, totals):
+                    height = bar.get_height()
+                    ax2.text(bar.get_x() + bar.get_width()/2., height + 0.02,
+                            f'{rate:.2f}\n({total} imgs)', ha='center', va='bottom', 
+                            fontsize=11, fontweight='bold')
         
-        # Plot 3: Heatmap of detection rates  
+        # Plot 3: Detection Rate Heatmap 
         ax3 = axes[1, 0]
         if len(scaling_df) > 0 and len(scaling_df['interpolation'].unique()) > 1:
             try:
                 pivot_data = scaling_df.pivot(index='interpolation', columns='scaling_factor', values='detection_rate')
-                im = ax3.imshow(pivot_data.values, cmap='RdYlGn', aspect='auto', vmin=0, vmax=1)
+                
+                from matplotlib.colors import LinearSegmentedColormap
+                colors_heatmap = ['#8B0000', '#FF4500', '#FFD700', '#90EE90', '#006400']
+                n_bins = 100
+                cmap = LinearSegmentedColormap.from_list('custom', colors_heatmap, N=n_bins)
+                
+                im = ax3.imshow(pivot_data.values, cmap=cmap, aspect='auto', vmin=0, vmax=1,
+                               interpolation='nearest')
                 
                 ax3.set_xticks(range(len(pivot_data.columns)))
-                ax3.set_xticklabels([f'{x:.1f}' for x in pivot_data.columns], rotation=45)
+                ax3.set_xticklabels([f'{x:.1f}' for x in pivot_data.columns], rotation=45, fontsize=10)
                 ax3.set_yticks(range(len(pivot_data.index)))
-                ax3.set_yticklabels(pivot_data.index)
-                ax3.set_xlabel('Scaling Factor')
-                ax3.set_ylabel('Interpolation Method')
-                ax3.set_title('Detection Rate Heatmap')
+                ax3.set_yticklabels(pivot_data.index, fontsize=10)
+                ax3.set_xlabel('Scaling Factor', fontsize=12, fontweight='bold')
+                ax3.set_ylabel('Interpolation Method', fontsize=12, fontweight='bold')
+                ax3.set_title('Detection Rate Heatmap', fontsize=14, fontweight='bold')
                 
-                # Add text annotations for values
+                # text annotations
                 for i in range(len(pivot_data.index)):
                     for j in range(len(pivot_data.columns)):
                         value = pivot_data.values[i, j]
-                        # Choose text color based on background brightness
-                        text_color = 'white' if value < 0.5 else 'black'
-                        text = f'{value:.2f}'
+                        if np.isnan(value):
+                            text = 'nan'
+                            text_color = 'gray'
+                        else:
+                            text = f'{value:.2f}'
+                            text_color = 'white' if value < 0.5 else 'black'
+                        
                         ax3.text(j, i, text, ha="center", va="center", 
-                                color=text_color, fontsize=10, fontweight='bold')
+                                color=text_color, fontsize=10, fontweight='bold',
+                                bbox=dict(boxstyle="round,pad=0.1", facecolor='white', alpha=0.3))
                 
-                cbar = plt.colorbar(im, ax=ax3, shrink=0.8)
-                cbar.set_label('Detection Rate')
+                cbar = plt.colorbar(im, ax=ax3, shrink=0.8, aspect=20)
+                cbar.set_label('Detection Rate', fontsize=11, fontweight='bold')
+                cbar.ax.tick_params(labelsize=10)
+                
             except Exception as e:
-                ax3.text(0.5, 0.5, f'Heatmap unavailable', 
-                        ha='center', va='center', transform=ax3.transAxes)
+                ax3.text(0.5, 0.5, f'Heatmap unavailable\n({str(e)})', 
+                        ha='center', va='center', transform=ax3.transAxes,
+                        fontsize=12, bbox=dict(boxstyle="round", facecolor='wheat', alpha=0.5))
         
-        # Plot 4: Max ∇C(f) vs Scaling Factor
+        # Plot 4: Individual Image Gradients vs Scaling Factor
         ax4 = axes[1, 1]
-        if len(scaling_df) > 0:
-            colors = ['darkorange', 'dodgerblue', 'deeppink', 'olive', 'teal']
-            markers = ['o', 's', '^', 'D', 'v']
+        if len(detailed_df) > 0:
+            valid_data = detailed_df.dropna(subset=['max_gradient', 'scaling_factor'])
             
-            for i, interp_method in enumerate(scaling_df['interpolation'].unique()):
-                method_data = scaling_df[scaling_df['interpolation'] == interp_method]
-                color = colors[i % len(colors)]
-                marker = markers[i % len(markers)]
-                ax4.plot(method_data['scaling_factor'], method_data['avg_max_gradient'], 
-                        marker=marker, linestyle='-', label=interp_method, 
-                        linewidth=2, markersize=8, color=color)
+            if len(valid_data) > 0:
+                detected_data = valid_data[valid_data['detected'] == True]
+                clean_data = valid_data[valid_data['detected'] == False]
+                
+                if len(clean_data) > 0:
+                    ax4.scatter(clean_data['scaling_factor'], clean_data['max_gradient'], 
+                              c='lightgreen', alpha=0.6, s=25, label=f'Clean Images ({len(clean_data)})', 
+                              marker='o', edgecolors='darkgreen', linewidths=0.5)
+                
+                if len(detected_data) > 0:
+                    ax4.scatter(detected_data['scaling_factor'], detected_data['max_gradient'], 
+                              c='lightcoral', alpha=0.8, s=40, label=f'Detected Images ({len(detected_data)})', 
+                              marker='^', edgecolors='darkred', linewidths=0.5)
+                
+                colors_trend = ['#000080', '#8B0000', '#006400', '#FF8C00', '#4B0082', '#8B4513']
+                markers_trend = ['o', 's', '^', 'D', 'v', 'P']
+                linestyles_trend = ['-', '--', '-.', ':', '-', '--']
+                
+                for i, interp_method in enumerate(scaling_df['interpolation'].unique()):
+                    method_data = scaling_df[scaling_df['interpolation'] == interp_method]
+                    color = colors_trend[i % len(colors_trend)]
+                    marker = markers_trend[i % len(markers_trend)]
+                    linestyle = linestyles_trend[i % len(linestyles_trend)]
+                    
+                    ax4.plot(method_data['scaling_factor'], method_data['avg_max_gradient'], 
+                            marker=marker, linestyle=linestyle, 
+                            label=f'{interp_method} (avg)', linewidth=2.5, markersize=7, 
+                            color=color, alpha=0.9, markeredgecolor='white', markeredgewidth=1)
 
-            # Optional: Plot gradient threshold (mean from table)
-            threshold_vals = scaling_df['avg_max_gradient']
-            if 'gradient_threshold' in detailed_df.columns:
-                gradient_thresh = detailed_df['gradient_threshold'].dropna().unique()
-                if len(gradient_thresh) > 0:
-                    ax4.axhline(y=gradient_thresh[0], color='gray', linestyle='--', label='Threshold')
+                if 'gradient_threshold' in valid_data.columns:
+                    gradient_thresh = valid_data['gradient_threshold'].dropna().unique()
+                    if len(gradient_thresh) > 0:
+                        ax4.axhline(y=gradient_thresh[0], color='black', linestyle='--', 
+                                   linewidth=2.5, alpha=0.8, 
+                                   label=f'Threshold: {gradient_thresh[0]:.4f}')
 
-            ax4.set_xlabel('Scaling Factor')
-            ax4.set_ylabel('Avg Max ∇C(f)')
-            ax4.set_title('Gradient Magnitude ∇C(f) vs Scaling Factor')
-            ax4.legend()
-            ax4.grid(True, alpha=0.3)
-            ax4.axvline(x=1.0, color='black', linestyle='--', alpha=0.5)
-
+                ax4.set_xlabel('Scaling Factor', fontsize=12, fontweight='bold')
+                ax4.set_ylabel('Max ∇C(f)', fontsize=12, fontweight='bold')
+                ax4.set_title('Individual Images & Average Gradients vs Scaling Factor', 
+                             fontsize=14, fontweight='bold')
+                ax4.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=9, 
+                          frameon=True, fancybox=True, shadow=True)
+                ax4.grid(True, alpha=0.4, linestyle='--')
+                ax4.axvline(x=1.0, color='black', linestyle='--', alpha=0.5, linewidth=1.5)
+                
+                ax4.axvspan(0.5, 1.0, alpha=0.05, color='red')
+                ax4.axvspan(1.0, max(valid_data['scaling_factor']), alpha=0.05, color='blue')
         
         plt.tight_layout()
-        plot_path = output_path / 'scaling_analysis_report.png'
-        plt.savefig(plot_path, bbox_inches='tight', facecolor='white')
+        plt.subplots_adjust(top=0.94)  
+        plot_path = output_path / 'detailed_scaling_analysis_report.png'
+        plt.savefig(plot_path, bbox_inches='tight', facecolor='white', dpi=300)
         plt.close()
-        
-        print(f"Analysis report saved to: {plot_path}")
-
-
-def save_scaling_visualization(filename, p_map, spectrum, prediction_error, detected, 
-                         scaling_factor, interpolation_method, detailed_metrics, output_folder):
-    fig = plt.figure(figsize=(16, 12))
-    gs = fig.add_gridspec(3, 2, height_ratios=[1, 1, 0.8], hspace=0.35, wspace=0.3)
-    
-    title_color = 'red' if detected else 'green'
-    status = "DETECTED" if detected else "CLEAN"
-    fig.suptitle(f'{filename} - {status}\nScale: {scaling_factor:.1f}x, Method: {interpolation_method}',
-                fontsize=16, fontweight='bold', color=title_color, y=0.95) 
-
-    # P-map
-    ax1 = fig.add_subplot(gs[0, 0])
-    im1 = ax1.imshow(p_map, cmap='gray', vmin=0, vmax=1)
-    ax1.set_title('P-Map (Equation 21)', fontsize=12)
-    plt.colorbar(im1, ax=ax1, shrink=0.8)
-
-    # Prediction Error
-    ax2 = fig.add_subplot(gs[0, 1])
-    error_range = np.percentile(prediction_error, [5, 95])
-    im2 = ax2.imshow(prediction_error, cmap='RdBu_r',
-                    vmin=error_range[0], vmax=error_range[1])
-    ax2.set_title('Prediction Error', fontsize=12)
-    plt.colorbar(im2, ax=ax2, shrink=0.8)
-
-    # Spectrum
-    ax3 = fig.add_subplot(gs[1, 0])
-    rows, cols = spectrum.shape
-    freq_x = np.linspace(-0.5, 0.5, cols)
-    freq_y = np.linspace(-0.5, 0.5, rows)
-    
-    spectrum_min = spectrum[spectrum > 0].min() if np.any(spectrum > 0) else 1e-6
-    im3 = ax3.imshow(spectrum, cmap='inferno',
-                    norm=LogNorm(vmin=spectrum_min, vmax=spectrum.max()),
-                    extent=[freq_x[0], freq_x[-1], freq_y[-1], freq_y[0]],
-                    origin='lower')
-    ax3.set_title('Frequency Spectrum', fontsize=12)
-    plt.colorbar(im3, ax=ax3, shrink=0.8)
-
-    # Error Distribution
-    ax4 = fig.add_subplot(gs[1, 1])
-    error_flat = prediction_error.flatten()
-    n_bins = min(50, int(np.sqrt(len(error_flat))))
-    ax4.hist(error_flat, bins=n_bins, alpha=0.7, edgecolor='black', density=True)
-    ax4.axvline(np.mean(error_flat), color='red', linestyle='--', linewidth=2, label='Mean')
-    ax4.set_title('Error Distribution', fontsize=12)
-    ax4.legend()
-    ax4.grid(True, alpha=0.3)
-
-    # Detection Summary Table
-    ax_table = fig.add_subplot(gs[2, :])
-    ax_table.axis('off')
-    
-    # Create simplified, clearer table
-    peak_count = detailed_metrics.get('peak_count', 0)
-    max_gradient = detailed_metrics.get('max_gradient', 0)
-    peak_detected = detailed_metrics.get('peak_method_detected', False)
-    gradient_detected = detailed_metrics.get('gradient_method_detected', False)
-    
-    table_data = [
-        ['Peak Analysis', f'{peak_count} peaks found', 'PASS' if peak_detected else 'NOT DETECTED'],
-        ['Gradient Analysis', f'Max gradient: {max_gradient:.4f}', 'PASS' if gradient_detected else 'NOT DETECTED'],
-        ['Final Decision', 'Peak OR Gradient method', 'DETECTED' if detected else 'NOT DETECTED']
-    ]
-    
-    headers = ['Detection Method', 'Result', 'Status']
-    
-    table = ax_table.table(cellText=table_data, colLabels=headers,
-                        cellLoc='center', loc='center',
-                        bbox=[0.1, 0.3, 0.8, 0.6])
-    
-    table.auto_set_font_size(False)
-    table.set_fontsize(12)
-    table.scale(1.0, 2.0)
-    
-    cellDict = table.get_celld()
-    n_rows, n_cols = len(table_data) + 1, len(headers)
-    
-    for i in range(n_rows):
-        for j in range(n_cols):
-            cell = cellDict.get((i, j))
-            if cell:
-                if i == 0:  # Header
-                    cell.set_facecolor('#e8e8e8')
-                    cell.set_text_props(weight='bold')
-                else:
-                    if j == 2:
-                        text = table_data[i-1][j]
-                        if text in ['PASS', 'DETECTED']:
-                            cell.set_facecolor('#d4edda')
-                        elif text in ['NOT DETECTED']:
-                            cell.set_facecolor('#e7f3ff')
-
-    base_name = filename.split(".")[0]
-    output_path = output_folder / f'{base_name}_scale{scaling_factor:.1f}_{interpolation_method}_analysis.png'
-    fig.savefig(output_path, bbox_inches='tight', facecolor='white')
-    plt.close(fig)
-    
-    return str(output_path)
-
 
 def run_scaling_test(input_folder, scaling_factors=None, sensitivity='medium', output_folder=None, detector_class=None, create_visualizations=True):
     test_suite = ScalingTestSuite(scaling_factors=scaling_factors)

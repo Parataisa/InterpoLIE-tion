@@ -154,8 +154,8 @@ class KirchnerDetector:
         try:
             img = np.array(Image.open(img_path).convert('L'))
             # downscale to 256x256
-            if (img.shape[0] > 256 or img.shape[1] > 256) and downscaling:
-                img = cv2.resize(img, (256, 256), interpolation=cv2.INTER_NEAREST)
+            if (img.shape[0] > 512 or img.shape[1] > 512) and downscaling:
+                img = cv2.resize(img, (512, 512), interpolation=cv2.INTER_NEAREST)
             return img
         except Exception as e:
             print(f"Error loading image {img_path}: {e}")
