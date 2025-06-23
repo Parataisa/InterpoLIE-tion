@@ -14,7 +14,7 @@ DOWNSCALE = True
 CROP_CENTER = False
 SCALING_VISUALIZATION = False
 
-SCALING_FACTORS = [0.3, 0.5, 0.7, 0.9, 1.2, 1.5, 1.8, 2.0]
+SCALING_FACTORS = [0.1, 0.3, 0.5, 0.7, 0.8, 0.9, 1.1, 1.2, 1.5, 1.8, 2.0, 2.2]
 INTERPOLATION_METHODS = {
     'nearest': cv2.INTER_NEAREST,
     'linear': cv2.INTER_LINEAR,

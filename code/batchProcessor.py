@@ -123,8 +123,7 @@ class BatchProcessor:
 
         batch_success = 0
         batch_errors = 0
-
-        for result in tqdm(valid_results, desc="Creating visualizations", unit="viz"):
+        for result in tqdm(valid_results, desc="Creating visualizations", unit="img"):
             try:
                 filename = result['file_name']
                 if 'file_path' not in result or not result['file_path']:

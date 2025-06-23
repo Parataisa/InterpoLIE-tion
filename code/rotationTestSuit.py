@@ -5,17 +5,18 @@ import time
 import pandas as pd
 import matplotlib.pyplot as plt
 import glob
+import math
 
 from pathlib import Path
-from visualizations import create_scaling_visualization
+from visualizations import create_rotation_visualization
 from fileHandler import FileHandler
 from analysisReport import AnalysisReports
 from kirchner import KirchnerDetector
 from tqdm import tqdm
 
-class ScalingTestSuite:
-    def __init__(self, scaling_factors=None, interpolation_methods=None, crop_center=False):
-        self.scaling_factors = scaling_factors or [0.5, 0.8, 1.2, 1.6, 2.0]
+class RotationTestSuite:
+    def __init__(self, rotation_angles=None, interpolation_methods=None, crop_center=False):
+        self.rotation_angles = rotation_angles or [5, 10, 15, 30, 45, 60, 90, 180, 270]
         self.crop_center = crop_center
         self.file_handler = FileHandler(crop_center=crop_center)
             
@@ -53,7 +54,34 @@ class ScalingTestSuite:
         except Exception as e:
             return {'file_name': Path(img_path).name, 'detected': None, 'error': str(e)}
 
-    def create_scaled_images(self, input_folder, output_folder, source_downscale_size=512, source_downscale=True):
+    def rotate_image(self, img, angle, interpolation):
+        h, w = img.shape[:2]
+        center = (w // 2, h // 2)
+        
+        rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+        
+        cos_angle = abs(rotation_matrix[0, 0])
+        sin_angle = abs(rotation_matrix[0, 1])
+        new_w = int((h * sin_angle) + (w * cos_angle))
+        new_h = int((h * cos_angle) + (w * sin_angle))
+        
+        rotation_matrix[0, 2] += (new_w / 2) - center[0]
+        rotation_matrix[1, 2] += (new_h / 2) - center[1]
+        
+        rotated = cv2.warpAffine(img, rotation_matrix, (new_w, new_h), 
+                                flags=interpolation, borderMode=cv2.BORDER_CONSTANT, 
+                                borderValue=0)
+        
+        if self.crop_center and (new_w > w or new_h > h):
+            start_x = max(0, (new_w - w) // 2)
+            start_y = max(0, (new_h - h) // 2)
+            end_x = min(new_w, start_x + w)
+            end_y = min(new_h, start_y + h)
+            rotated = rotated[start_y:end_y, start_x:end_x]
+        
+        return rotated
+
+    def create_rotated_images(self, input_folder, output_folder, source_downscale_size=512, source_downscale=True):
         input_path = Path(input_folder)
         output_path = Path(output_folder)
         self.file_handler.create_output_folder(output_path)
@@ -62,9 +90,10 @@ class ScalingTestSuite:
         self.file_handler.downscale_size = source_downscale_size
         self.file_handler.downscale = source_downscale
         
-        print(f"Creating scaled versions of {len(images)} images...")
+        print(f"Creating rotated versions of {len(images)} images...")
         print(f"Initial processing: {'Enabled' if source_downscale else 'Disabled'} (target: {source_downscale_size}px)")
         print(f"Crop center: {'Enabled' if self.crop_center else 'Disabled'}")
+        print(f"Rotation angles: {self.rotation_angles}")
         
         created_images = []
         
@@ -84,33 +113,30 @@ class ScalingTestSuite:
                 created_images.append({
                     'file_path': str(original_copy),
                     'original_name': original_name,
-                    'scaling_factor': 1.0,
+                    'rotation_angle': 0.0,
                     'interpolation': 'original',
                     'category': 'original'
                 })
 
-                h, w = img.shape[:2]
-                
-                for scale_factor in self.scaling_factors:
+                for angle in self.rotation_angles:
                     for interp_name, interp_method in self.interpolation_methods.items():
                         try:
-                            new_h, new_w = int(h * scale_factor), int(w * scale_factor)
-                            scaled_img = cv2.resize(img, (new_w, new_h), interpolation=interp_method)
+                            rotated_img = self.rotate_image(img, angle, interp_method)
                             
-                            scaled_name = f"{original_name}_scale{scale_factor:.1f}_{interp_name}{original_ext}"
-                            scaled_path = image_folder / scaled_name
-                            scaled_img_uint8 = np.clip(scaled_img, 0, 255).astype(np.uint8)
-                            cv2.imwrite(str(scaled_path), scaled_img_uint8)
+                            rotated_name = f"{original_name}_rot{angle:03d}_{interp_name}{original_ext}"
+                            rotated_path = image_folder / rotated_name
+                            rotated_img_uint8 = np.clip(rotated_img, 0, 255).astype(np.uint8)
+                            cv2.imwrite(str(rotated_path), rotated_img_uint8)
                             
                             created_images.append({
-                                'file_path': str(scaled_path),
+                                'file_path': str(rotated_path),
                                 'original_name': original_name,
-                                'scaling_factor': scale_factor,
+                                'rotation_angle': angle,
                                 'interpolation': interp_name,
-                                'category': 'downscaled' if scale_factor < 1.0 else 'upscaled'
+                                'category': 'rotated'
                             })
-                        except Exception as scale_error:
-                            tqdm.write(f"Warning: Failed {scale_factor:.1f}x {interp_name} for {original_name}: {scale_error}")
+                        except Exception as rotation_error:
+                            tqdm.write(f"Warning: Failed {angle}° {interp_name} for {original_name}: {rotation_error}")
                             
             except Exception as e:
                 tqdm.write(f"Error processing {img_path}: {e}")
@@ -118,26 +144,26 @@ class ScalingTestSuite:
         print(f"\nCreated {len(created_images)} test images")
         return created_images, str(output_path)
 
-    def run_scaling_test(self, input_folder, output_folder=None, sensitivity='medium', detector_class=None, create_visualizations=True, downscale_size=512, downscale=True):
+    def run_rotation_test(self, input_folder, output_folder=None, sensitivity='medium', detector_class=None, create_visualizations=True, downscale_size=512, downscale=True):
         if output_folder is None:
             timestamp = time.strftime('%Y%m%d_%H%M%S')
-            output_folder = f'scaling_test_{timestamp}'
+            output_folder = f'rotation_test_{timestamp}'
         
         output_path = Path(output_folder)
         self.file_handler.create_output_folder(output_path)
         self.file_handler.downscale_size = downscale_size
         self.file_handler.downscale = downscale
         
-        print("=== STEP 1: Creating scaled test images ===")
-        scaled_images_folder = output_path / 'scaled_images'
-        created_images, scaled_folder = self.create_scaled_images(input_folder, scaled_images_folder, 
-                                                                downscale_size, downscale)
+        print("=== STEP 1: Creating rotated test images ===")
+        rotated_images_folder = output_path / 'rotated_images'
+        created_images, rotated_folder = self.create_rotated_images(input_folder, rotated_images_folder, 
+                                                                  downscale_size, downscale)
         
         print("\n=== STEP 2: Running Kirchner detection ===")
         detector_class = detector_class or KirchnerDetector
         detector = detector_class(sensitivity=sensitivity, downscale_size=downscale_size, downscale=False)
 
-        images = self.file_handler.scan_folder(scaled_folder)
+        images = self.file_handler.scan_folder(rotated_folder)
         print(f"Found {len(images)} images to process")
         
         results = []
@@ -154,16 +180,16 @@ class ScalingTestSuite:
         print(f"\n✅ Detection phase completed: {detection_count}/{len(images)} flagged as resampled")
         
         print("\n=== STEP 3: Analyzing results ===")
-        analysis_results = AnalysisReports.analyze_scaling_results(created_images, results, output_path)
+        analysis_results = AnalysisReports.analyze_rotation_results(created_images, results, output_path)
         
         print("\n=== STEP 4: Creating analysis report ===")
-        AnalysisReports.create_scaling_report(analysis_results, output_path)
+        AnalysisReports.create_rotation_report(analysis_results, output_path)
         
         if create_visualizations:
             print("\n=== STEP 5: Creating visualizations ===")
             self.create_visualizations(results, created_images, output_path, downscale_size)
         
-        print(f"\n🎉 Scaling test completed! Results in: {output_path}")
+        print(f"\n🎉 Rotation test completed! Results in: {output_path}")
         print(f"📊 Summary: {detection_count}/{len(images)} images flagged as resampled")
         
         return analysis_results
@@ -178,8 +204,8 @@ class ScalingTestSuite:
         results_by_image = {}
         for result in valid_results:
             filename = result['file_name']
-            if '_scale' in filename:
-                original_name = filename.split('_scale')[0]
+            if '_rot' in filename:
+                original_name = filename.split('_rot')[0]
             elif '_original' in filename:
                 original_name = filename.split('_original')[0]
             else:
@@ -195,7 +221,6 @@ class ScalingTestSuite:
         
         visualization_count = 0
         errors_count = 0
-        total_items = sum(len(image_results) for image_results in results_by_image.items())
         
         progress_items = []
         for original_name, image_results in results_by_image.items():
@@ -207,24 +232,24 @@ class ScalingTestSuite:
                 image_vis_folder = vis_folder / original_name
                 filename = result['file_name']
                 
-                if '_scale' in filename:
-                    scale_part = filename.split('_scale')[1]
-                    parts = scale_part.split('_')
-                    scaling_factor = float(parts[0]) if len(parts) >= 2 else 1.0
+                if '_rot' in filename:
+                    rot_part = filename.split('_rot')[1]
+                    parts = rot_part.split('_')
+                    rotation_angle = int(parts[0]) if len(parts) >= 2 else 0
                     interpolation_method = parts[1].split('.')[0] if len(parts) >= 2 else 'unknown'
                 else:
-                    scaling_factor = 1.0
+                    rotation_angle = 0
                     interpolation_method = 'original'
                 
                 file_path = file_path_lookup.get(filename)
                 
-                create_scaling_visualization(
+                create_rotation_visualization(
                     result['file_name'],
                     result['p_map'],
                     result['spectrum'],
                     result['prediction_error'],
                     result['detected'],
-                    scaling_factor,
+                    rotation_angle,
                     interpolation_method,
                     result['detailed_metrics'],
                     image_vis_folder,
@@ -241,6 +266,6 @@ class ScalingTestSuite:
         print(f"\n✅ Created {visualization_count} visualizations ({errors_count} errors)")
         return visualization_count, errors_count
 
-def run_scaling_test(input_folder, scaling_factors=None, interpolation_methods=None, sensitivity='medium', output_folder=None, detector_class=None, create_visualizations=True, downscale_size=512, downscale=True, crop_center=False):
-    test_suite = ScalingTestSuite(scaling_factors=scaling_factors, interpolation_methods=interpolation_methods, crop_center=crop_center)
-    return test_suite.run_scaling_test(input_folder, output_folder, sensitivity, detector_class, create_visualizations, downscale_size, downscale)
+def run_rotation_test(input_folder, rotation_angles=None, interpolation_methods=None, sensitivity='medium', output_folder=None, detector_class=None, create_visualizations=True, downscale_size=512, downscale=True, crop_center=False):
+    test_suite = RotationTestSuite(rotation_angles=rotation_angles, interpolation_methods=interpolation_methods, crop_center=crop_center)
+    return test_suite.run_rotation_test(input_folder, output_folder, sensitivity, detector_class, create_visualizations, downscale_size, downscale)
