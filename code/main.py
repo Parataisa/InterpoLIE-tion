@@ -10,8 +10,8 @@ from rotationTestSuite import run_rotation_test
 
 # Configuration
 IMAGE_FOLDER_PATH = 'img'
-DOWNSCALE_SIZE = 256  
-DOWNSCALE = True
+DOWNSCALE_SIZE = 1024  
+DOWNSCALE = False
 CROP_CENTER = False
 
 RUN_BATCH_PROCESSING = True
