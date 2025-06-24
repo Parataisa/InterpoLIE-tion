@@ -9,7 +9,7 @@ from scalingTestSuite import run_scaling_test
 
 # Configuration
 IMAGE_FOLDER_PATH = 'img'
-DOWNSCALE_SIZE = 512  
+DOWNSCALE_SIZE = 256  
 DOWNSCALE = True
 CROP_CENTER = False
 SCALING_VISUALIZATION = True
