@@ -150,9 +150,9 @@ class BatchProcessor:
         print(f"Time: {total_time:.1f}s")
         print(f"Results: {csv_path}")
 
-def quick_scan(input_folder, output_folder=None, sensitivity='medium', downscale_size=512, downscale=True, crop_center=False):
+def quick_scan(input_folder, output_folder=None, sensitivity='medium', downscale_size=512, downscale=True, crop_center=False, save_visualizations=True):
     if output_folder is None:
         output_folder = "results"
 
     processor = BatchProcessor(input_folder, output_folder, sensitivity, downscale_size, downscale, crop_center=crop_center)
-    return processor.process_batch()
+    return processor.process_batch(save_visualizations=save_visualizations)
