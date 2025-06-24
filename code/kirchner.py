@@ -29,7 +29,7 @@ class KirchnerDetector:
         
         sensitivity_params = {
             'low':    {'gradient_threshold': 0.010}, 
-            'medium': {'gradient_threshold': 0.011},  
+            'medium': {'gradient_threshold': 0.015},  
             'high':   {'gradient_threshold': 0.030}    
         }
 
@@ -84,7 +84,6 @@ class KirchnerDetector:
         detected, max_gradient, gradient_map = self.detect_cumulative_periodogram(spectrum)
         
         tqdm.write(f"          Max gradient: {max_gradient:.6f}, Threshold: {self.gradient_threshold:.6f}")
-        tqdm.write(f"          Detection result: {'DETECTED' if detected else 'CLEAN'}")
         
         return {
             'p_map': p_map,
@@ -132,7 +131,7 @@ class KirchnerDetector:
         center_h, center_w = h // 2, w // 2
         spectrum[center_h, center_w] = 0
         
-        #First quadrant of a p-map's DFT (0 ≤ f ≤ b)"
+        #First quadrant of a p-map's DFT (0 <= f <= b)"
         first_quadrant = spectrum[center_h:, center_w:]
         
         # Equation 23: C(f) = sum|P(f')|^2 / sum_total|P(f')|^2
