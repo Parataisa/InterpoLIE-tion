@@ -38,6 +38,7 @@
 	\begin{enumerate}
 		\setlength{\itemsep}{0.5em}
 		\item \textbf{Fall-Erinnerung} - Kartoffel-Contest Betrug
+		\item \textbf{Interpolations-Methoden} - Einfache vs. fortgeschrittene Algorithmen
 		\item \textbf{Kirchner's Methode~\cite{kirchner_fast_2008}} - Das "Rezept" zur Detektion
 		\item \textbf{Praktische Anwendung} - Fallauflösung mit Ergebnissen
 		\item \textbf{Grenzen \& Lessons Learned} - Was funktioniert (nicht)?
@@ -77,13 +78,11 @@
 			\vspace{0.3em}
 			\includegraphics[width=0.8\textwidth]{images/image_2.jpg}
 			\vspace{0.2em}
-			\textcolor{green}{\textbf{Unmanipuliert}}
 			
 			\textbf{Verdächtiges Bild:}
 			\vspace{0.3em}
 			\includegraphics[width=0.8\textwidth]{images/image_2_s.jpg}
 			\vspace{0.2em}
-			\textcolor{red}{\textbf{Manipuliert?}}
 		\end{column}
 	\end{columns}
 \end{frame}
@@ -186,6 +185,22 @@
 \end{frame}
 
 \begin{frame}
+	\begin{columns}[T]
+		\begin{column}{0.60\textwidth}
+			\frametitle{Schritt 1: Linear Prediction Filter - How it works~\footnote{\textit{Anmerkung:} Stark Simplifiziert, um Konzept zu verdeutlichen}}
+			\includegraphics[width=\textwidth]{images/apply_filter.png}
+		\end{column}
+		\begin{column}{0.38\textwidth}
+			\begin{itemize}
+				\item \textcolor{blue}{Vorhersagefehler} wird für jedes Pixel berechnet
+				\item \textcolor{blue}{Periodische Muster} erzeugen starke Korrelationen
+			\end{itemize}
+		\end{column}			
+	\end{columns}
+
+\end{frame}
+
+\begin{frame}
 	\frametitle{Schritt 1: Linear Prediction Filter - Visualisierung}
 	\begin{columns}[T]
 		\begin{column}{0.48\textwidth}
@@ -264,6 +279,21 @@
 \end{frame}
 
 \begin{frame}
+	\frametitle{Schritt 2: P-Map Generation - Visualisierung}
+	
+	\begin{columns}[T]
+		\begin{column}{0.48\textwidth}
+			\includegraphics[width=\textwidth]{images/examples_unedited/p_map_zoom.png}
+			\textcolor{green}{\small Original P-Map (Zufällig)}
+		\end{column}
+		\begin{column}{0.48\textwidth}
+			\includegraphics[width=\textwidth]{images/examples_edited/p_map_zoom.png}
+			\textcolor{red}{\small Resampled P-Map (Periodisch)}
+		\end{column}
+	\end{columns}
+\end{frame}
+
+\begin{frame}
 	\frametitle{Schritt 3: Spektralanalyse \& Peak Detection}
 	
 	\begin{columns}[T]
@@ -331,8 +361,33 @@
 
 \begin{frame}
 	\frametitle{Fallauflösung: Analyseergebnisse}
+	\begin{columns}[T]
+		\begin{column}{0.6\textwidth}
+			\includegraphics[width=\textwidth]{images/scaling_analysis_report.png}
+		\end{column}
+		\begin{column}{0.40\textwidth}
+			\begin{itemize}
+				\item 11 Originalbilder
+				\item 10 Scalierungsfaktoren(110 Bilder)
+			\end{itemize}
+		\end{column}
+	\end{columns}
+\end{frame}
 
-	
+\begin{frame}
+	\frametitle{Fallauflösung: Analyseergebnisse}
+	\begin{columns}[T]
+		\begin{column}{0.6\textwidth}
+			\includegraphics[width=\textwidth]{images/scaling_analysis_report_full.png}
+		\end{column}
+		\begin{column}{0.40\textwidth}
+			\begin{itemize}
+				\item 11 Originalbilder
+				\item 10 Scalierungsfaktoren(110 Bilder)
+				\item 4 Interpolationsmethoden(451 Bilder)
+			\end{itemize}
+		\end{column}
+	\end{columns}
 \end{frame}
 
 \subsection{Grenzen \& Lessons Learned}
@@ -344,20 +399,17 @@
 		\begin{column}{0.48\textwidth}
 			\begin{alertblock}{Kritische Einschränkungen}
 				\begin{itemize}
-					\item \textcolor{red}{JPEG-Kompression} (Qualität < 95)
-					\item \textcolor{red}{Kleine Skalierungsfaktoren} (< 1.05)
-					\item \textcolor{red}{Downsampling} schwieriger als Upsampling
-					\item \textcolor{red}{Texturreiche Bilder} (False Positives)
+					\item \textcolor{red}{Sehr Abhängig vom Bildinhalt} (False Positives)
+					\item \textcolor{red}{Fixed Threshold} für $\delta'_T$ kann zu Fehlklassifikationen führen
+					\item \textcolor{red}{Interpolationsmethoden} können die Detektion beeinflussen
+					\item \textcolor{red}{Anti-Forensik-Methoden} können die Detektion umgehen~\cite{kirchner_hiding_2008}
 				\end{itemize}
 			\end{alertblock}
 		\end{column}
 		\begin{column}{0.48\textwidth}
 			\begin{exampleblock}{Was funktioniert gut}
 				\begin{itemize}
-					\item \textcolor{green}{Unkomprimierte Bilder} (TIFF)
-					\item \textcolor{green}{Upsampling} > 1.1x
-					\item \textcolor{green}{Hochqualitative JPEG} (Q > 95)
-					\item \textcolor{green}{Homogene Bildbereiche}
+					\item \textcolor{green}{Homogene Bildbereiche, ohne Muster}
 				\end{itemize}
 			\end{exampleblock}
 		\end{column}
@@ -384,7 +436,7 @@
             \item Methode ist ein \textbf{Indiz}, kein Beweis
             \item Muss mit anderen forensischen Methoden kombiniert werden
             \item Expertenwissen für Interpretation notwendig
-            \item Anti-Forensik-Methoden können Detektion umgehen~\cite{kirchner_hiding_2008}
+            \item Don't overcomplicate: Einfachheit ist oft effektiver
         \end{itemize}
     \end{block}
 \end{frame}

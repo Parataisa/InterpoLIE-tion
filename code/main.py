@@ -10,13 +10,13 @@ from rotationTestSuite import run_rotation_test
 
 # Configuration
 IMAGE_FOLDER_PATH = 'img'
-DOWNSCALE_SIZE = 1024  
+DOWNSCALE_SIZE = 256  
 DOWNSCALE = True
 CROP_CENTER = False
 
 RUN_BATCH_PROCESSING = True
 BATCH_VISUALIZATION = True
-SAVE_INTERMEDIATE_STEPS = True
+SAVE_INTERMEDIATE_STEPS = False
 
 RUN_SCALING_TEST = True
 SCALING_VISUALIZATION = True
@@ -28,10 +28,10 @@ SCALING_FACTORS = [0.2, 0.5, 0.7, 0.8, 0.9, 1.1, 1.2, 1.5, 1.8, 2.0]
 ROTATION_ANGLES = [5, 10, 15, 30, 45, 60, 90, 180, 270]
 
 INTERPOLATION_METHODS = {
-    #'nearest': cv2.INTER_NEAREST,
+    'nearest': cv2.INTER_NEAREST,
     'linear': cv2.INTER_LINEAR,
-    #'cubic': cv2.INTER_CUBIC,
-    #'lanczos': cv2.INTER_LANCZOS4
+    'cubic': cv2.INTER_CUBIC,
+    'lanczos': cv2.INTER_LANCZOS4
 }
 
 def run_demo(sensitivity='medium'):
