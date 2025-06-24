@@ -133,7 +133,7 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
                     cell.set_text_props(size=10)
     
     plt.subplots_adjust(left=0.08, bottom=0.12, right=0.95, top=0.88, wspace=0.3, hspace=0.4)
-    plt.savefig(output_path, bbox_inches='tight', facecolor='white', dpi=300)
+    plt.savefig(output_path, bbox_inches='tight', facecolor='white')
     plt.close(fig)
     
     return str(output_path)

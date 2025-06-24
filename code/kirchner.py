@@ -31,7 +31,7 @@ class KirchnerDetector:
         
         sensitivity_params = {
             'low':    {'gradient_threshold': 0.020}, 
-            'medium': {'gradient_threshold': 0.036},  
+            'medium': {'gradient_threshold': 0.026},  
             'high':   {'gradient_threshold': 0.060}    
         }
         

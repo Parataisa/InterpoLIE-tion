@@ -145,7 +145,7 @@ class AnalysisReports:
         plt.tight_layout()
         plt.subplots_adjust(top=0.94)
         plot_path = output_folder / 'batch_analysis_report.png'
-        plt.savefig(plot_path, bbox_inches='tight', facecolor='white', dpi=300)
+        plt.savefig(plot_path, bbox_inches='tight', facecolor='white')
         plt.close()
 
     @staticmethod
@@ -165,7 +165,7 @@ class AnalysisReports:
         plt.tight_layout()
         plt.subplots_adjust(top=0.94)
         plot_path = output_path / 'scaling_analysis_report.png'
-        plt.savefig(plot_path, bbox_inches='tight', facecolor='white', dpi=300)
+        plt.savefig(plot_path, bbox_inches='tight', facecolor='white')
         plt.close()
 
     @staticmethod
@@ -185,7 +185,7 @@ class AnalysisReports:
         plt.tight_layout()
         plt.subplots_adjust(top=0.94)
         plot_path = output_path / 'rotation_analysis_report.png'
-        plt.savefig(plot_path, bbox_inches='tight', facecolor='white', dpi=300)
+        plt.savefig(plot_path, bbox_inches='tight', facecolor='white')
         plt.close()
 
     @staticmethod
