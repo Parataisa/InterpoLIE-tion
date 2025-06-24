@@ -37,7 +37,7 @@ class KirchnerDetector:
         self.gradient_threshold = params['gradient_threshold']
         self.sensitivity = sensitivity
 
-    def detect(self, img_input, skip_internal_downscale=False):
+    def detect(self, img_input, skip_internal_downscale=False, save_intermediate_steps=True):
         try:
             if isinstance(img_input, (str, Path)):
                 tqdm.write(f"      Loading image: {Path(img_input).name}")
@@ -48,7 +48,7 @@ class KirchnerDetector:
                 tqdm.write(f"      Using pre-loaded image, size: {image.shape}")
             
             tqdm.write(f"      Running Kirchner detection...")
-            results = self.detect_resampling(image)
+            results = self.detect_resampling(image, save_intermediate_steps=save_intermediate_steps)
             detected = results['detected']
             tqdm.write(f"      Detection result: {'DETECTED' if detected else 'CLEAN'}")
 
@@ -62,26 +62,38 @@ class KirchnerDetector:
             tqdm.write(f"      ERROR in detect(): {e}")
             raise
 
-    def detect_resampling(self, image):
+    def detect_resampling(self, image, save_intermediate_steps=True):
         tqdm.write(f"        Step 1: Input preparation")
         if len(image.shape) == 3:
             image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         image = image.astype(np.float32)
+        if save_intermediate_steps:
+            self.file_handler.save_presentation_image(image, 'demo/presentation', 'image.png', 'standard')
         
         tqdm.write(f"        Step 2: Linear prediction with preset coefficients (Equation 25)")
         predicted = convolve(image, self.predictor_filter, mode='reflect')
+        if save_intermediate_steps:
+            self.file_handler.save_presentation_image(predicted, 'demo/presentation', 'predicted.png', 'standard')
         
         tqdm.write(f"        Step 3: Prediction error computation")
         prediction_error = image - predicted
+        if save_intermediate_steps:
+            self.file_handler.save_presentation_image(prediction_error, 'demo/presentation', 'prediction_error.png', 'prediction_error')
         
         tqdm.write(f"        Step 4: P-map generation (Equation 21: p = lambda * exp(-|e|^tau / sigma))")
         p_map = self.generate_p_map(prediction_error)
-        
+        if save_intermediate_steps:
+            self.file_handler.save_presentation_image(p_map, 'demo/presentation', 'p_map.png', 'p_map')
+
         tqdm.write(f"        Step 5: Spectrum computation with contrast function gamma")
         spectrum = self.compute_spectrum(p_map)
+        if save_intermediate_steps:
+            self.file_handler.save_presentation_image(spectrum, 'demo/presentation', 'spectrum.png', 'spectrum')
         
         tqdm.write(f"        Step 6: Cumulative periodogram detection (Equation 23-24)")
         detected, max_gradient, gradient_map = self.detect_cumulative_periodogram(spectrum)
+        if save_intermediate_steps:
+            self.file_handler.save_presentation_image(gradient_map, 'demo/presentation', 'gradient_map.png', 'gradient')
         
         tqdm.write(f"          Max gradient: {max_gradient:.6f}, Threshold: {self.gradient_threshold:.6f}")
         
@@ -139,7 +151,7 @@ class KirchnerDetector:
         total_energy = np.sum(energy)
         
         if total_energy == 0:
-            return False, 0.0
+            return False, 0.0, np.zeros_like(first_quadrant)
         
         cumulative_matrix = np.zeros_like(energy)
         for i in range(energy.shape[0]):

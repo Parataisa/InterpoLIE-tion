@@ -1,0 +1,177 @@
+% $ biblatex auxiliary file $
+% $ biblatex bbl format version 3.3 $
+% Do not modify the above lines!
+%
+% This is an auxiliary file used by the 'biblatex' package.
+% This file may safely be deleted. It will be recreated by
+% biber as required.
+%
+\begingroup
+\makeatletter
+\@ifundefined{ver@biblatex.sty}
+  {\@latex@error
+     {Missing 'biblatex' package}
+     {The bibliography requires the 'biblatex' package.}
+      \aftergroup\endinput}
+  {}
+\endgroup
+
+
+\refsection{0}
+  \datalist[entry]{nty/global//global/global/global}
+    \entry{kirchner_fast_2008}{inproceedings}{}{}
+      \name{author}{1}{}{%
+        {{hash=0dd4cf14aac1341eb5295eba8750ce83}{%
+           family={Kirchner},
+           familyi={K\bibinitperiod},
+           given={Matthias},
+           giveni={M\bibinitperiod}}}%
+      }
+      \list{location}{1}{%
+        {New York, NY, USA}%
+      }
+      \list{publisher}{1}{%
+        {Association for Computing Machinery}%
+      }
+      \strng{namehash}{0dd4cf14aac1341eb5295eba8750ce83}
+      \strng{fullhash}{0dd4cf14aac1341eb5295eba8750ce83}
+      \strng{fullhashraw}{0dd4cf14aac1341eb5295eba8750ce83}
+      \strng{bibnamehash}{0dd4cf14aac1341eb5295eba8750ce83}
+      \strng{authorbibnamehash}{0dd4cf14aac1341eb5295eba8750ce83}
+      \strng{authornamehash}{0dd4cf14aac1341eb5295eba8750ce83}
+      \strng{authorfullhash}{0dd4cf14aac1341eb5295eba8750ce83}
+      \strng{authorfullhashraw}{0dd4cf14aac1341eb5295eba8750ce83}
+      \field{sortinit}{K}
+      \field{sortinithash}{c02bf6bff1c488450c352b40f5d853ab}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{abstract}{This paper revisits the state-of-the-art resampling detector, which is based on periodic artifacts in the residue of a local linear predictor. Inspired by recent findings from the literature, we take a closer look at the complex detection procedure and model the detected artifacts in the spatial and frequency domain by means of the variance of the prediction residue. We give an exact formulation on how transformation parameters influence the appearance of periodic artifacts and analytically derive the expected position of characteristic resampling peaks. We present an equivalent accelerated and simplified detector, which is orders of magnitudes faster than the conventional scheme and experimentally shown to be comparably reliable.}
+      \field{booktitle}{Proceedings of the 10th {ACM} workshop on {Multimedia} and security}
+      \field{isbn}{978-1-60558-058-6}
+      \field{month}{9}
+      \field{series}{{MM}\&amp;{Sec} '08}
+      \field{title}{Fast and reliable resampling detection by spectral analysis of fixed linear predictor residue}
+      \field{urlday}{1}
+      \field{urlmonth}{6}
+      \field{urlyear}{2025}
+      \field{year}{2008}
+      \field{urldateera}{ce}
+      \field{pages}{11\bibrangedash 20}
+      \range{pages}{10}
+      \verb{doi}
+      \verb 10.1145/1411328.1411333
+      \endverb
+      \verb{urlraw}
+      \verb https://doi.org/10.1145/1411328.1411333
+      \endverb
+      \verb{url}
+      \verb https://doi.org/10.1145/1411328.1411333
+      \endverb
+    \endentry
+    \entry{kirchner_hiding_2008}{article}{}{}
+      \name{author}{2}{}{%
+        {{hash=0dd4cf14aac1341eb5295eba8750ce83}{%
+           family={Kirchner},
+           familyi={K\bibinitperiod},
+           given={Matthias},
+           giveni={M\bibinitperiod}}}%
+        {{hash=4e8ac33c3abfbab73d1d0a4e28e7bdbe}{%
+           family={Bohme},
+           familyi={B\bibinitperiod},
+           given={Rainer},
+           giveni={R\bibinitperiod}}}%
+      }
+      \strng{namehash}{38b93968f6decc3b8e61769a499dcfca}
+      \strng{fullhash}{38b93968f6decc3b8e61769a499dcfca}
+      \strng{fullhashraw}{38b93968f6decc3b8e61769a499dcfca}
+      \strng{bibnamehash}{38b93968f6decc3b8e61769a499dcfca}
+      \strng{authorbibnamehash}{38b93968f6decc3b8e61769a499dcfca}
+      \strng{authornamehash}{38b93968f6decc3b8e61769a499dcfca}
+      \strng{authorfullhash}{38b93968f6decc3b8e61769a499dcfca}
+      \strng{authorfullhashraw}{38b93968f6decc3b8e61769a499dcfca}
+      \field{sortinit}{K}
+      \field{sortinithash}{c02bf6bff1c488450c352b40f5d853ab}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{abstract}{Resampling detection has become a standard tool for forensic analyses of digital images. This paper presents new variants of image transformation operations which are undetectable by resampling detectors based on periodic variations in the residual signal of local linear predictors in the spatial domain. The effectiveness of the proposed method is supported with evidence from experiments on a large image database for various parameter settings. We benchmark detectability as well as the resulting image quality against conventional linear and bicubic interpolation and interpolation with a sinc kernel. These early findings on ldquocounter-forensicrdquo techniques put into question the reliability of known forensic tools against smart counterfeiters in general, and might serve as benchmarks and motivation for the development of much improved forensic techniques.}
+      \field{annotation}{[TLDR] Early findings on ldquocounter-forensicrdquo techniques put into question the reliability of known forensic tools against smart counterfeiters in general, and might serve as benchmarks and motivation for the development of much improved forensic techniques.}
+      \field{issn}{1556-6013}
+      \field{journaltitle}{IEEE Transactions on Information Forensics and Security}
+      \field{month}{12}
+      \field{number}{4}
+      \field{title}{Hiding {Traces} of {Resampling} in {Digital} {Images}}
+      \field{urlday}{4}
+      \field{urlmonth}{6}
+      \field{urlyear}{2025}
+      \field{volume}{3}
+      \field{year}{2008}
+      \field{urldateera}{ce}
+      \field{pages}{582\bibrangedash 592}
+      \range{pages}{11}
+      \verb{doi}
+      \verb 10.1109/TIFS.2008.2008214
+      \endverb
+      \verb{urlraw}
+      \verb http://ieeexplore.ieee.org/document/4668368/
+      \endverb
+      \verb{url}
+      \verb http://ieeexplore.ieee.org/document/4668368/
+      \endverb
+    \endentry
+    \entry{popescu_exposing_2005}{article}{}{}
+      \name{author}{2}{}{%
+        {{hash=ecced5c9ea69b53fa04fa01845e00b8b}{%
+           family={Popescu},
+           familyi={P\bibinitperiod},
+           given={A.C.},
+           giveni={A\bibinitperiod}}}%
+        {{hash=cb7601dcefd22ac658e186871082a796}{%
+           family={Farid},
+           familyi={F\bibinitperiod},
+           given={H.},
+           giveni={H\bibinitperiod}}}%
+      }
+      \strng{namehash}{053d617bb0844495a978ce29a30c1d0a}
+      \strng{fullhash}{053d617bb0844495a978ce29a30c1d0a}
+      \strng{fullhashraw}{053d617bb0844495a978ce29a30c1d0a}
+      \strng{bibnamehash}{053d617bb0844495a978ce29a30c1d0a}
+      \strng{authorbibnamehash}{053d617bb0844495a978ce29a30c1d0a}
+      \strng{authornamehash}{053d617bb0844495a978ce29a30c1d0a}
+      \strng{authorfullhash}{053d617bb0844495a978ce29a30c1d0a}
+      \strng{authorfullhashraw}{053d617bb0844495a978ce29a30c1d0a}
+      \field{sortinit}{P}
+      \field{sortinithash}{ff3bcf24f47321b42cb156c2cc8a8422}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{abstract}{The unique stature of photographs as a definitive recording of events is being diminished due, in part, to the ease with which digital images can be manipulated and altered. Although good forgeries may leave no visual clues of having been tampered with, they may, nevertheless, alter the underlying statistics of an image. For example, we describe how resampling (e.g., scaling or rotating) introduces specific statistical correlations, and describe how these correlations can be automatically detected in any portion of an image. This technique works in the absence of any digital watermark or signature. We show the efficacy of this approach on uncompressed TIFF images, and JPEG and GIF images with minimal compression. We expect this technique to be among the first of many tools that will be needed to expose digital forgeries.}
+      \field{issn}{1941-0476}
+      \field{journaltitle}{IEEE Transactions on Signal Processing}
+      \field{month}{2}
+      \field{number}{2}
+      \field{title}{Exposing digital forgeries by detecting traces of resampling}
+      \field{urlday}{1}
+      \field{urlmonth}{6}
+      \field{urlyear}{2025}
+      \field{volume}{53}
+      \field{year}{2005}
+      \field{urldateera}{ce}
+      \field{pages}{758\bibrangedash 767}
+      \range{pages}{10}
+      \verb{doi}
+      \verb 10.1109/TSP.2004.839932
+      \endverb
+      \verb{file}
+      \verb Snapshot:C\:\\Users\\dbarb\\Zotero\\storage\\H3DLWT4F\\1381775.html:text/html
+      \endverb
+      \verb{urlraw}
+      \verb https://ieeexplore.ieee.org/document/1381775
+      \endverb
+      \verb{url}
+      \verb https://ieeexplore.ieee.org/document/1381775
+      \endverb
+      \keyw{Forgery,Image coding,Transform coding,Digital forensics,Digital images,Digital recording,digital tampering,Forensics,Motion pictures,Splicing,Statistics,Watermarking}
+    \endentry
+  \enddatalist
+\endrefsection
+\endinput
+

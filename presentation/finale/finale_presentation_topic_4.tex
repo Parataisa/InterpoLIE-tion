@@ -125,7 +125,7 @@
 	\end{columns}
 	
 	\begin{alertblock}{Detektierbarkeit}
-		\textcolor{orange}{\textbf{Schwieriger zu detektieren}} - subtilere periodische Muster
+		\textcolor{red}{\textbf{Schwieriger zu detektieren}} - subtilere periodische Muster
 	\end{alertblock}
 \end{frame}
 
@@ -147,7 +147,7 @@
 	\begin{enumerate}
 		\item \textbf{Input:} Verdächtiges Bild
 		\item \textbf{Prozess:} Suche nach periodischen Interpolations-Artefakten
-		\item \textbf{Output:} Wahrscheinlichkeit für Resampling
+		\item \textbf{Output:} Klassifikation als "Resampled" oder "Original"
 	\end{enumerate}
 \end{frame}
 
@@ -173,16 +173,43 @@
 			\textbf{Was passiert hier?}
 			\begin{itemize}
 				\item Jeder Pixel wird durch Nachbarn vorhergesagt
-				\item \textcolor{blue}{Echte Bilder:} Zufällige Prediction Errors
-				\item \textcolor{red}{Interpolierte Bilder:} Periodische Muster in Errors
 			\end{itemize}
 			
 			\vspace{0.5em}
 			\textbf{Warum feste Koeffizienten?}
 			\begin{itemize}
 				\item Interpolation erzeugt periodische Artefakte \textit{unabhängig} von den exakten Koeffizienten
-				\item Massive Beschleunigung
+				\item Massive Beschleunigung(im vergleich zu EM)
 			\end{itemize}
+		\end{column}
+	\end{columns}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Schritt 1: Linear Prediction Filter - Visualisierung}
+	\begin{columns}[T]
+		\begin{column}{0.48\textwidth}
+			\includegraphics[width=\textwidth]{images/examples_unedited/predicted.png}
+			\textcolor{green}{\small Original Prediction Error}
+		\end{column}
+		\begin{column}{0.48\textwidth}
+			\includegraphics[width=\textwidth]{images/examples_edited/predicted.png}
+			\textcolor{red}{\small Resampled Prediction Error}
+		\end{column}
+	\end{columns}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Schritt 1: Linear Prediction Filter - Visualisierung}
+	
+	\begin{columns}[T]
+		\begin{column}{0.48\textwidth}
+			\includegraphics[width=\textwidth]{images/examples_unedited/predicted_zoom.png}
+			\textcolor{green}{\small Original Prediction Error}
+		\end{column}
+		\begin{column}{0.48\textwidth}
+			\includegraphics[width=\textwidth]{images/examples_edited/predicted_zoom.png}
+			\textcolor{red}{\small Resampled Prediction Error}
 		\end{column}
 	\end{columns}
 \end{frame}
@@ -222,6 +249,21 @@
 \end{frame}
 
 \begin{frame}
+	\frametitle{Schritt 2: P-Map Generation - Visualisierung}
+
+	\begin{columns}[T]
+		\begin{column}{0.48\textwidth}
+			\includegraphics[width=\textwidth]{images/examples_unedited/p_map.png}
+			\textcolor{green}{\small Original P-Map (Zufällig)}
+		\end{column}
+		\begin{column}{0.48\textwidth}
+			\includegraphics[width=\textwidth]{images/examples_edited/p_map.png}
+			\textcolor{red}{\small Resampled P-Map (Periodisch)}
+		\end{column}
+	\end{columns}
+\end{frame}
+
+\begin{frame}
 	\frametitle{Schritt 3: Spektralanalyse \& Peak Detection}
 	
 	\begin{columns}[T]
@@ -256,16 +298,41 @@
 	\end{columns}
 \end{frame}
 
+\begin{frame}
+	\frametitle{Schritt 3: Spektralanalyse - Visualisierung}
+	
+	\begin{columns}[T]
+		\begin{column}{0.48\textwidth}
+			\includegraphics[width=\textwidth]{images/examples_unedited/spectrum.png}
+			\textcolor{green}{\small Original Spektrum (Zufällig)}
+		\end{column}
+		\begin{column}{0.48\textwidth}
+			\includegraphics[width=\textwidth]{images/examples_edited/spectrum.png}
+			\textcolor{red}{\small Resampled Spektrum (Periodisch)}
+		\end{column}
+	\end{columns}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Schritt 3: Decision Criterion - Visualisierung}
+	\begin{columns}[T]
+		\begin{column}{0.48\textwidth}
+			\includegraphics[width=\textwidth]{images/examples_unedited/gradient_map.png}
+			\textcolor{green}{\small Original Gradienten Map("Zufällig")}
+		\end{column}
+		\begin{column}{0.48\textwidth}
+			\includegraphics[width=\textwidth]{images/examples_edited/gradient_map.png}
+			\textcolor{red}{\small Resampled Gradienten Map("Periodisch")}
+		\end{column}
+	\end{columns}
+\end{frame}
+
 \subsection{Praktische Anwendung}
 
 \begin{frame}
 	\frametitle{Fallauflösung: Analyseergebnisse}
+
 	
-\end{frame}
-
-\begin{frame}
-	\frametitle{Visualisierung: P-Maps \& Spektren}
-
 \end{frame}
 
 \subsection{Grenzen \& Lessons Learned}

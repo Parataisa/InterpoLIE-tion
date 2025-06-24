@@ -15,10 +15,11 @@ matplotlib.use('Agg')
 
 class BatchProcessor:
     def __init__(self, input_folder, output_folder, sensitivity='medium', 
-                 downscale_size=512, downscale=True, crop_center=False):
+                 downscale_size=512, downscale=True, crop_center=False, save_intermediate_steps=False):
         self.input_folder = Path(input_folder)
         self.output_folder = Path(output_folder)
         self.sensitivity = sensitivity
+        self.save_intermediate_steps = save_intermediate_steps
         
         self.file_handler = FileHandler(downscale_size, downscale, crop_center=crop_center)
         self.file_handler.create_output_folder(self.output_folder)
@@ -37,7 +38,7 @@ class BatchProcessor:
                                         downscale_size=self.file_handler.downscale_size, 
                                         downscale=False) 
             
-            result = detector.detect(image, skip_internal_downscale=True)
+            result = detector.detect(image, skip_internal_downscale=True, save_intermediate_steps=self.save_intermediate_steps)
             detailed_metrics = detector.extract_detection_metrics(result['spectrum'])
             
             processing_time = time.time() - start_time
@@ -150,9 +151,9 @@ class BatchProcessor:
         print(f"Time: {total_time:.1f}s")
         print(f"Results: {csv_path}")
 
-def quick_scan(input_folder, output_folder=None, sensitivity='medium', downscale_size=512, downscale=True, crop_center=False, save_visualizations=True):
+def quick_scan(input_folder, output_folder=None, sensitivity='medium', downscale_size=512, downscale=True, crop_center=False, save_visualizations=True, save_intermediate_steps=False):
     if output_folder is None:
         output_folder = "results"
 
-    processor = BatchProcessor(input_folder, output_folder, sensitivity, downscale_size, downscale, crop_center=crop_center)
+    processor = BatchProcessor(input_folder, output_folder, sensitivity, downscale_size, downscale, crop_center=crop_center, save_intermediate_steps=save_intermediate_steps)
     return processor.process_batch(save_visualizations=save_visualizations)

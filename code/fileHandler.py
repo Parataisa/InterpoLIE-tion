@@ -118,3 +118,83 @@ class FileHandler:
     def create_output_folder(self, output_path):
         Path(output_path).mkdir(parents=True, exist_ok=True)
         return str(Path(output_path).resolve())
+
+    def save_presentation_image(self, img, output_path, filename, image_type='auto', 
+                            spectrum_gamma=0.5, error_gamma=0.6, clahe_enabled=True):
+        output_folder = Path(output_path)
+        if not output_folder.exists():
+            output_folder.mkdir(parents=True, exist_ok=True)
+
+        file_path = output_folder / filename
+        
+        try:
+            img_display = img.copy()
+            
+            if image_type == 'auto':
+                filename_lower = filename.lower()
+                if 'p_map' in filename_lower or 'pmap' in filename_lower:
+                    image_type = 'p_map'
+                elif 'gradient' in filename_lower:
+                    image_type = 'gradient'
+                elif 'spectrum' in filename_lower:
+                    image_type = 'spectrum'
+                elif 'error' in filename_lower:
+                    image_type = 'prediction_error'
+                else:
+                    image_type = 'standard'
+            
+            if image_type == 'p_map':
+                img_display = (img_display * 255).astype(np.uint8)
+                img_display = 255 - img_display  # Invert, no colormap
+                
+            elif image_type == 'gradient':
+                if img_display.max() > img_display.min():
+                    img_display = ((img_display - img_display.min()) / 
+                                (img_display.max() - img_display.min()) * 255).astype(np.uint8)
+                else:
+                    img_display = np.zeros_like(img_display, dtype=np.uint8)
+                    
+            elif image_type == 'spectrum':
+                if img_display.max() > 0:
+                    epsilon = img_display[img_display > 0].min() * 0.001 if np.any(img_display > 0) else 1e-10
+                    img_log = np.log10(img_display + epsilon)
+                    img_normalized = (img_log - img_log.min()) / (img_log.max() - img_log.min())
+                    
+                    img_contrast = np.power(img_normalized, spectrum_gamma)
+                    img_uint8 = (img_contrast * 255).astype(np.uint8)
+                    
+                    if clahe_enabled:
+                        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
+                        img_uint8 = clahe.apply(img_uint8)
+                    
+                    img_display = img_uint8
+                else:
+                    img_display = np.zeros_like(img_display, dtype=np.uint8)
+                    
+            elif image_type == 'prediction_error':
+                abs_max = np.max(np.abs(img_display))
+                if abs_max > 0:
+                    img_centered = (img_display + abs_max) / (2 * abs_max)
+                    img_contrast = np.power(img_centered, error_gamma)
+                    img_uint8 = (img_contrast * 255).astype(np.uint8)
+                    
+                    if clahe_enabled:
+                        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+                        img_uint8 = clahe.apply(img_uint8)
+                    
+                    img_display = img_uint8
+                else:
+                    img_display = np.full_like(img_display, 128, dtype=np.uint8)
+            else:
+                img_display = np.clip(img_display, 0, 255).astype(np.uint8)
+            
+            if len(img_display.shape) == 3:
+                img_display = cv2.cvtColor(img_display, cv2.COLOR_RGB2GRAY)
+            
+            img_pil = Image.fromarray(img_display, mode='L')
+            img_pil.save(file_path, dpi=(300, 300), quality=95)
+            
+            return str(file_path.resolve())
+            
+        except Exception as e:
+            raise IOError(f"Error saving presentation image {file_path}: {e}")
