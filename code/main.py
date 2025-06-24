@@ -13,8 +13,11 @@ DOWNSCALE_SIZE = 512
 DOWNSCALE = True
 CROP_CENTER = False
 SCALING_VISUALIZATION = True
+ROTATION_VISUALIZATION = True
 
 SCALING_FACTORS = [0.2, 0.5, 0.7, 0.8, 0.9, 1.1, 1.2, 1.5, 1.8, 2.0]
+ROTATION_ANGLES = [5, 10, 15, 30, 45, 60, 90, 180, 270]
+
 INTERPOLATION_METHODS = {
     'nearest': cv2.INTER_NEAREST,
     'linear': cv2.INTER_LINEAR,
@@ -33,7 +36,7 @@ def run_demo(sensitivity='medium'):
     print("="*60)
     
     timestamp = time.strftime('%Y%m%d_%H%M%S')
-    root_demo_folder = f'kirchner_demo_{timestamp}'
+    root_demo_folder = f'demo/{IMAGE_FOLDER_PATH}_{timestamp}'
     Path(root_demo_folder).mkdir(parents=True, exist_ok=True)
     
     print(f"\n📁 All results will be saved to: {root_demo_folder}")
@@ -79,6 +82,26 @@ def run_demo(sensitivity='medium'):
             print(f"✓ Overall detection rate: {results_scaling['overall_detection_rate']:.3f}")
     except Exception as e:
         print(f"✗ Scaling test failed: {e}")
+
+    print("\n=== Rotation Test with Angular Analysis ===")
+    rotation_output = Path(root_demo_folder) / 'rotation_test'
+    try:
+        results_rotation = run_rotation_test(
+            IMAGE_FOLDER_PATH,
+            rotation_angles=ROTATION_ANGLES,
+            interpolation_methods=INTERPOLATION_METHODS,
+            sensitivity=sensitivity,
+            output_folder=str(rotation_output),
+            create_visualizations=ROTATION_VISUALIZATION,
+            downscale_size=DOWNSCALE_SIZE,
+            downscale=DOWNSCALE,
+            crop_center=CROP_CENTER
+        )
+        print(f"✓ Rotation test completed! Results in: {rotation_output}")
+        if results_rotation and 'overall_detection_rate' in results_rotation:
+            print(f"✓ Overall detection rate: {results_rotation['overall_detection_rate']:.3f}")
+    except Exception as e:
+        print(f"✗ Rotation test failed: {e}")
     
     print(f"\n🎯 Demo completed! All results organized in: {root_demo_folder}")
     

@@ -68,6 +68,64 @@ class AnalysisReports:
         }
 
     @staticmethod
+    def analyze_rotation_results(created_images, detection_results, output_path):
+        config_df = pd.DataFrame(created_images)
+        
+        results_data = []
+        for result in detection_results:
+            row = {
+                'file_name': result['file_name'],
+                'detected': result.get('detected', False),
+                'processing_time': result.get('processing_time', None)
+            }
+            
+            if 'detailed_metrics' in result and result['detailed_metrics']:
+                metrics = result['detailed_metrics']
+                row.update({
+                    'max_gradient': metrics.get('max_gradient', None),
+                    'gradient_threshold': metrics.get('gradient_threshold', None),
+                    'spectrum_mean': metrics.get('spectrum_mean', None),
+                    'spectrum_std': metrics.get('spectrum_std', None),
+                    'spectrum_max': metrics.get('spectrum_max', None)
+                })
+            
+            results_data.append(row)
+        
+        detection_df = pd.DataFrame(results_data)
+        
+        config_df['file_name'] = config_df['file_path'].apply(lambda x: os.path.basename(x))
+        if not detection_df.empty:
+            merged_df = config_df.merge(detection_df, on='file_name', how='left')
+        else:
+            merged_df = config_df.copy()
+            merged_df['detected'] = False
+        
+        merged_df['detected'] = merged_df['detected'].infer_objects(copy=False).fillna(False)
+        
+        rotation_analysis = merged_df.groupby(['rotation_angle', 'interpolation']).agg({
+            'detected': ['count', 'sum', 'mean'],
+            'processing_time': 'mean',
+            'max_gradient': 'mean',
+        }).round(6)
+        
+        rotation_analysis.columns = ['total_images', 'detected_count', 'detection_rate', 
+                                    'avg_processing_time', 'avg_max_gradient']
+        rotation_analysis = rotation_analysis.reset_index()
+        
+        detailed_results_path = output_path / 'rotation_results_detailed.csv'
+        merged_df.to_csv(detailed_results_path, index=False)
+        
+        rotation_results_path = output_path / 'rotation_angle_analysis.csv'
+        rotation_analysis.to_csv(rotation_results_path, index=False)
+        
+        return {
+            'detailed_results': merged_df,
+            'rotation_analysis': rotation_analysis,
+            'total_images': len(merged_df),
+            'overall_detection_rate': merged_df['detected'].mean() if len(merged_df) > 0 else 0.0
+        }
+
+    @staticmethod
     def create_scaling_report(analysis_results, output_path):
         detailed_df = analysis_results['detailed_results']
         scaling_df = analysis_results['scaling_analysis']

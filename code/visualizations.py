@@ -166,3 +166,24 @@ def create_scaling_visualization(filename, p_map, spectrum, prediction_error, de
     
     return create_unified_visualization(result_data, output_path, visualization_type='scaling', 
                                       crop_center=crop_center, downscale_size=downscale_size)
+
+def create_rotation_visualization(filename, p_map, spectrum, prediction_error, detected, 
+                                rotation_angle, interpolation_method, detailed_metrics, 
+                                output_folder, file_path=None, crop_center=False, downscale_size=512):
+    base_name = filename.split('.')[0]
+    output_path = output_folder / f'{base_name}_rot{rotation_angle:03d}_{interpolation_method}_analysis.png'
+    
+    result_data = {
+        'file_name': filename,
+        'file_path': file_path,
+        'detected': detected,
+        'p_map': p_map,
+        'spectrum': spectrum,
+        'prediction_error': prediction_error,
+        'detailed_metrics': detailed_metrics,
+        'rotation_angle': rotation_angle,
+        'interpolation': interpolation_method
+    }
+    
+    return create_unified_visualization(result_data, output_path, visualization_type='rotation', 
+                                      crop_center=crop_center, downscale_size=downscale_size)
