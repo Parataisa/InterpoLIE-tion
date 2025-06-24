@@ -18,17 +18,26 @@ class AnalysisReports:
             row = {
                 'file_name': result['file_name'],
                 'detected': result.get('detected', False),
-                'processing_time': result.get('processing_time', None)
+                'processing_time': result.get('processing_time', None),
+                'max_gradient': result.get('max_gradient', None) 
             }
             
-            if 'detailed_metrics' in result and result['detailed_metrics']:
+            if row['max_gradient'] is None and 'detailed_metrics' in result and result['detailed_metrics']:
                 metrics = result['detailed_metrics']
                 row.update({
-                    'max_gradient': metrics.get('max_gradient', None),
-                    'gradient_threshold': metrics.get('gradient_threshold', None),
-                    'spectrum_mean': metrics.get('spectrum_mean', None),
-                    'spectrum_std': metrics.get('spectrum_std', None),
-                    'spectrum_max': metrics.get('spectrum_max', None)
+                    'max_gradient': metrics.get('max_gradient', 0.0),
+                    'gradient_threshold': metrics.get('gradient_threshold', 0.008),
+                    'spectrum_mean': metrics.get('spectrum_mean', 0.0),
+                    'spectrum_std': metrics.get('spectrum_std', 0.0),
+                    'spectrum_max': metrics.get('spectrum_max', 0.0)
+                })
+            else:
+                row.update({
+                    'max_gradient': row['max_gradient'] or 0.0,
+                    'gradient_threshold': result.get('gradient_threshold', 0.008),
+                    'spectrum_mean': result.get('spectrum_mean', 0.0),
+                    'spectrum_std': result.get('spectrum_std', 0.0),
+                    'spectrum_max': result.get('spectrum_max', 0.0)
                 })
             
             results_data.append(row)
@@ -44,14 +53,29 @@ class AnalysisReports:
         
         merged_df['detected'] = merged_df['detected'].infer_objects(copy=False).fillna(False)
         
-        scaling_analysis = merged_df.groupby(['scaling_factor', 'interpolation']).agg({
-            'detected': ['count', 'sum', 'mean'],
-            'processing_time': 'mean',
-            'max_gradient': 'mean',
-        }).round(6)
+        if 'max_gradient' not in merged_df.columns:
+            merged_df['max_gradient'] = 0.0
+        else:
+            merged_df['max_gradient'] = merged_df['max_gradient'].fillna(0.0)
         
-        scaling_analysis.columns = ['total_images', 'detected_count', 'detection_rate', 
-                                   'avg_processing_time', 'avg_max_gradient']
+        agg_dict = {
+            'detected': ['count', 'sum', 'mean'],
+            'processing_time': 'mean'
+        }
+        
+        if 'max_gradient' in merged_df.columns and merged_df['max_gradient'].notna().any():
+            agg_dict['max_gradient'] = 'mean'
+        
+        scaling_analysis = merged_df.groupby(['scaling_factor', 'interpolation']).agg(agg_dict).round(6)
+        
+        if len(agg_dict) == 3: 
+            scaling_analysis.columns = ['total_images', 'detected_count', 'detection_rate', 
+                                       'avg_processing_time', 'avg_max_gradient']
+        else:
+            scaling_analysis.columns = ['total_images', 'detected_count', 'detection_rate', 
+                                       'avg_processing_time']
+            scaling_analysis['avg_max_gradient'] = 0.0  # Add default column
+        
         scaling_analysis = scaling_analysis.reset_index()
         
         detailed_results_path = output_path / 'scaling_results_detailed.csv'
@@ -76,17 +100,27 @@ class AnalysisReports:
             row = {
                 'file_name': result['file_name'],
                 'detected': result.get('detected', False),
-                'processing_time': result.get('processing_time', None)
+                'processing_time': result.get('processing_time', None),
+                'max_gradient': result.get('max_gradient', None)
             }
             
-            if 'detailed_metrics' in result and result['detailed_metrics']:
+            if row['max_gradient'] is None and 'detailed_metrics' in result and result['detailed_metrics']:
                 metrics = result['detailed_metrics']
                 row.update({
-                    'max_gradient': metrics.get('max_gradient', None),
-                    'gradient_threshold': metrics.get('gradient_threshold', None),
-                    'spectrum_mean': metrics.get('spectrum_mean', None),
-                    'spectrum_std': metrics.get('spectrum_std', None),
-                    'spectrum_max': metrics.get('spectrum_max', None)
+                    'max_gradient': metrics.get('max_gradient', 0.0),
+                    'gradient_threshold': metrics.get('gradient_threshold', 0.008),
+                    'spectrum_mean': metrics.get('spectrum_mean', 0.0),
+                    'spectrum_std': metrics.get('spectrum_std', 0.0),
+                    'spectrum_max': metrics.get('spectrum_max', 0.0)
+                })
+            else:
+                # Ensure all fields have default values
+                row.update({
+                    'max_gradient': row['max_gradient'] or 0.0,
+                    'gradient_threshold': result.get('gradient_threshold', 0.008),
+                    'spectrum_mean': result.get('spectrum_mean', 0.0),
+                    'spectrum_std': result.get('spectrum_std', 0.0),
+                    'spectrum_max': result.get('spectrum_max', 0.0)
                 })
             
             results_data.append(row)
@@ -102,14 +136,29 @@ class AnalysisReports:
         
         merged_df['detected'] = merged_df['detected'].infer_objects(copy=False).fillna(False)
         
-        rotation_analysis = merged_df.groupby(['rotation_angle', 'interpolation']).agg({
-            'detected': ['count', 'sum', 'mean'],
-            'processing_time': 'mean',
-            'max_gradient': 'mean',
-        }).round(6)
+        if 'max_gradient' not in merged_df.columns:
+            merged_df['max_gradient'] = 0.0
+        else:
+            merged_df['max_gradient'] = merged_df['max_gradient'].fillna(0.0)
         
-        rotation_analysis.columns = ['total_images', 'detected_count', 'detection_rate', 
-                                    'avg_processing_time', 'avg_max_gradient']
+        agg_dict = {
+            'detected': ['count', 'sum', 'mean'],
+            'processing_time': 'mean'
+        }
+        
+        if 'max_gradient' in merged_df.columns and merged_df['max_gradient'].notna().any():
+            agg_dict['max_gradient'] = 'mean'
+        
+        rotation_analysis = merged_df.groupby(['rotation_angle', 'interpolation']).agg(agg_dict).round(6)
+        
+        if len(agg_dict) == 3: 
+            rotation_analysis.columns = ['total_images', 'detected_count', 'detection_rate', 
+                                        'avg_processing_time', 'avg_max_gradient']
+        else:
+            rotation_analysis.columns = ['total_images', 'detected_count', 'detection_rate', 
+                                        'avg_processing_time']
+            rotation_analysis['avg_max_gradient'] = 0.0  # Add default column
+        
         rotation_analysis = rotation_analysis.reset_index()
         
         detailed_results_path = output_path / 'rotation_results_detailed.csv'
@@ -261,41 +310,26 @@ class AnalysisReports:
     @staticmethod
     def _plot_parameter_heatmap(ax, analysis_df, param_col, param_label, format_str):
         if len(analysis_df) > 0 and len(analysis_df['interpolation'].unique()) > 1:
-            try:
-                pivot_data = analysis_df.pivot(index='interpolation', columns=param_col, values='detection_rate')
-                
-                colors_heatmap = ['#006400', '#90EE90', '#FFD700', '#FF4500', '#8B0000']
-                n_bins = 100
-                cmap = LinearSegmentedColormap.from_list('custom', colors_heatmap, N=n_bins)
-                
-                im = ax.imshow(pivot_data.values, cmap=cmap, aspect='auto', vmin=0, vmax=1,
-                               interpolation='nearest')
-                
-                ax.set_xticks(range(len(pivot_data.columns)))
-                ax.set_xticklabels([format_str.format(x) for x in pivot_data.columns], rotation=45, fontsize=10)
-                ax.set_yticks(range(len(pivot_data.index)))
-                ax.set_yticklabels(pivot_data.index, fontsize=10)
-                ax.set_xlabel(param_label, fontsize=12, fontweight='bold')
-                ax.set_ylabel('Interpolation Method', fontsize=12, fontweight='bold')
-                ax.set_title('Detection Rate Heatmap', fontsize=14, fontweight='bold')
-                
-                for i in range(len(pivot_data.index)):
-                    for j in range(len(pivot_data.columns)):
-                        value = pivot_data.values[i, j]
-                        if not np.isnan(value):
-                            text = f'{value:.2f}'
-                            text_color = 'white' if value > 0.6 else 'black'
-                            ax.text(j, i, text, ha="center", va="center", 
-                                    color=text_color, fontsize=10, fontweight='bold')
-                
-                cbar = plt.colorbar(im, ax=ax, shrink=0.8, aspect=20)
-                cbar.set_label('Detection Rate', fontsize=11, fontweight='bold')
-                cbar.ax.tick_params(labelsize=10)
-                
-            except Exception as e:
-                ax.text(0.5, 0.5, f'Heatmap unavailable\n({str(e)})', 
-                        ha='center', va='center', transform=ax.transAxes,
-                        fontsize=12, bbox=dict(boxstyle="round", facecolor='wheat', alpha=0.5))
+            pivot_data = analysis_df.pivot(index='interpolation', columns=param_col, values='detection_rate')
+            
+            colors_heatmap = ['#006400', '#90EE90', '#FFD700', '#FF4500', '#8B0000']
+            n_bins = 100
+            cmap = LinearSegmentedColormap.from_list('custom', colors_heatmap, N=n_bins)
+            
+            im = ax.imshow(pivot_data.values, cmap=cmap, aspect='auto', vmin=0, vmax=1,
+                            interpolation='nearest')
+            
+            ax.set_xticks(range(len(pivot_data.columns)))
+            ax.set_xticklabels([format_str.format(x) for x in pivot_data.columns], rotation=45, fontsize=10)
+            ax.set_yticks(range(len(pivot_data.index)))
+            ax.set_yticklabels(pivot_data.index, fontsize=10)
+            ax.set_xlabel(param_label, fontsize=12, fontweight='bold')
+            ax.set_ylabel('Interpolation Method', fontsize=12, fontweight='bold')
+            ax.set_title('Detection Rate Heatmap', fontsize=14, fontweight='bold')
+            
+            cbar = plt.colorbar(im, ax=ax, shrink=0.8, aspect=20)
+            cbar.set_label('Detection Rate', fontsize=11, fontweight='bold')
+            cbar.ax.tick_params(labelsize=10)
 
     @staticmethod
     def _plot_gradient_vs_parameter(ax, detailed_df, analysis_df, param_col, param_label, reference_line=None):
@@ -479,48 +513,93 @@ class AnalysisReports:
 
     @staticmethod
     def _plot_batch_gradient_progression(ax, valid_results):
-        gradients = [r.get('max_gradient', 0) for r in valid_results if r.get('max_gradient') is not None]
-        
-        if gradients:
-            image_indices = list(range(len(valid_results)))
-            gradient_values = [r.get('max_gradient', 0) for r in valid_results if r.get('max_gradient') is not None]
-            detection_status = [r['detected'] for r in valid_results if r.get('max_gradient') is not None]
+        try:
+            # Extract gradient data with proper index tracking
+            gradient_data = []
+            for i, result in enumerate(valid_results):
+                max_grad = result.get('max_gradient')
+                if max_grad is not None and not (isinstance(max_grad, float) and np.isnan(max_grad)):
+                    gradient_data.append({
+                        'index': i,
+                        'max_gradient': max_grad,
+                        'detected': result.get('detected', False),
+                        'filename': result.get('file_name', f'image_{i}')
+                    })
             
-            detected_indices = [i for i, detected in enumerate(detection_status) if detected]
-            clean_indices = [i for i, detected in enumerate(detection_status) if not detected]
-            detected_grads = [gradient_values[i] for i in detected_indices]
-            clean_grads = [gradient_values[i] for i in clean_indices]
+            if not gradient_data:
+                ax.text(0.5, 0.5, 'No valid gradient data available', ha='center', va='center',
+                        transform=ax.transAxes, fontsize=14, fontweight='bold')
+                return
             
+            # Extract aligned data
+            indices = [d['index'] for d in gradient_data]
+            gradients = [d['max_gradient'] for d in gradient_data]
+            detected_flags = [d['detected'] for d in gradient_data]
+            
+            # Separate detected vs clean
+            clean_indices = [indices[i] for i, detected in enumerate(detected_flags) if not detected]
+            clean_gradients = [gradients[i] for i, detected in enumerate(detected_flags) if not detected]
+            detected_indices = [indices[i] for i, detected in enumerate(detected_flags) if detected]
+            detected_gradients = [gradients[i] for i, detected in enumerate(detected_flags) if detected]
+            
+            # Plot scatter points
             if clean_indices:
-                ax.scatter(clean_indices, clean_grads, 
-                        c='lightgreen', alpha=0.6, s=60, label=f'Clean Images ({len(clean_indices)})', 
-                        marker='o', edgecolors='darkgreen', linewidths=1.5)
+                ax.scatter(clean_indices, clean_gradients, 
+                          c='lightgreen', alpha=0.7, s=60, label=f'Clean Images ({len(clean_indices)})', 
+                          marker='o', edgecolors='darkgreen', linewidths=1.5)
             
             if detected_indices:
-                ax.scatter(detected_indices, detected_grads, 
-                        c='lightcoral', alpha=0.8, s=80, label=f'Detected Images ({len(detected_indices)})', 
-                        marker='^', edgecolors='darkred', linewidths=1.5)
+                ax.scatter(detected_indices, detected_gradients, 
+                          c='lightcoral', alpha=0.8, s=80, label=f'Detected Images ({len(detected_indices)})', 
+                          marker='^', edgecolors='darkred', linewidths=1.5)
             
-            window_size = max(3, len(gradient_values) // 8)
-            rolling_gradient = []
-            for i in range(len(gradient_values)):
-                start_idx = max(0, i - window_size // 2)
-                end_idx = min(len(gradient_values), i + window_size // 2 + 1)
-                window_grads = gradient_values[start_idx:end_idx]
-                rolling_gradient.append(sum(window_grads) / len(window_grads))
+            # Calculate rolling average
+            if len(gradients) > 3:
+                window_size = max(3, len(gradients) // 10)
+                rolling_gradient = []
+                rolling_indices = []
+                
+                for i in range(len(gradients)):
+                    start_idx = max(0, i - window_size // 2)
+                    end_idx = min(len(gradients), i + window_size // 2 + 1)
+                    window_grads = gradients[start_idx:end_idx]
+                    rolling_gradient.append(sum(window_grads) / len(window_grads))
+                    rolling_indices.append(indices[i])
+                
+                ax.plot(rolling_indices, rolling_gradient, color='#000080', linestyle='-', 
+                        linewidth=2.5, alpha=0.9, label=f'Rolling Average (window={window_size})')
             
-            ax.plot(image_indices[:len(rolling_gradient)], rolling_gradient, color='#000080', linestyle='-', 
-                    linewidth=2.5, alpha=0.9, label=f'Rolling Average (window={window_size})')
-            
-            if valid_results and 'gradient_threshold' in valid_results[0]:
-                threshold = valid_results[0]['gradient_threshold']
+            # Add threshold line if available
+            thresholds = [result.get('gradient_threshold') for result in valid_results 
+                         if result.get('gradient_threshold') is not None]
+            if thresholds:
+                threshold = thresholds[0]  # They should all be the same
                 ax.axhline(y=threshold, color='black', linestyle='--', 
-                        linewidth=2.5, alpha=0.8, 
-                        label=f'Threshold: {threshold:.6f}')
-
+                          linewidth=2.5, alpha=0.8, 
+                          label=f'Threshold: {threshold:.6f}')
+            
+            # Add statistics
+            stats_text = f'Total gradients: {len(gradient_data)}\n'
+            stats_text += f'Mean: {np.mean(gradients):.6f}\n'
+            stats_text += f'Max: {np.max(gradients):.6f}\n'
+            stats_text += f'Min: {np.min(gradients):.6f}'
+            
+            ax.text(0.02, 0.98, stats_text, transform=ax.transAxes, 
+                    fontsize=9, va='top', ha='left',
+                    bbox=dict(boxstyle="round,pad=0.3", facecolor='lightblue', alpha=0.8))
+            
             ax.set_xlabel('Image Processing Order', fontsize=12, fontweight='bold')
             ax.set_ylabel('Max ∇C(f)', fontsize=12, fontweight='bold')
-            ax.set_title('Gradient Progression Through Batch', 
-                        fontsize=14, fontweight='bold')
+            ax.set_title('Gradient Progression Through Batch', fontsize=14, fontweight='bold')
             ax.legend(fontsize=10, frameon=True, fancybox=True, shadow=True)
             ax.grid(True, alpha=0.4, linestyle='--')
+            
+            # Set appropriate limits
+            if gradients:
+                y_margin = (max(gradients) - min(gradients)) * 0.1
+                ax.set_ylim(min(gradients) - y_margin, max(gradients) + y_margin)
+            
+        except Exception as e:
+            ax.text(0.5, 0.5, f'Gradient progression failed:\n{str(e)}', 
+                    ha='center', va='center', transform=ax.transAxes, fontsize=12,
+                    bbox=dict(boxstyle="round,pad=0.3", facecolor='lightcoral', alpha=0.8))

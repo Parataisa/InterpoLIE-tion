@@ -11,8 +11,10 @@ from pathlib import Path
 from fileHandler import FileHandler
 from tqdm import tqdm
 
+PRINT_OUTPUT = False
+
 class KirchnerDetector:
-    def __init__(self, sensitivity='medium', lambda_param=1.0, tau=2.0, sigma=1.0, downscale_size=512, downscale=True):
+    def __init__(self, sensitivity='medium', lambda_param=1.0, tau=2.0, sigma=1.0, downscale_size=512, downscale=True, max_gradient=None):
         # Preset filter coefficients from Equation 25
         self.predictor_filter = np.array([
             [-0.25, 0.50, -0.25],
@@ -29,14 +31,18 @@ class KirchnerDetector:
         self.sigma = sigma
         self.file_handler = FileHandler(downscale_size, downscale)
         
-        sensitivity_params = {
-            'low':    {'gradient_threshold': 0.020}, 
-            'medium': {'gradient_threshold': 0.026},  
-            'high':   {'gradient_threshold': 0.060}    
-        }
-        
-        params = sensitivity_params.get(sensitivity, sensitivity_params['medium'])
-        self.gradient_threshold = params['gradient_threshold']
+        if max_gradient is not None:
+            self.gradient_threshold = max_gradient
+            self.custom_threshold = True
+        else:
+            sensitivity_params = {
+                'low':    {'gradient_threshold': 0.05}, 
+                'medium': {'gradient_threshold': 0.11},  
+                'high':   {'gradient_threshold': 0.30}    
+            }
+            params = sensitivity_params.get(sensitivity, sensitivity_params['medium'])
+            self.gradient_threshold = params['gradient_threshold']
+            self.custom_threshold = False
 
     def detect(self, img_input, skip_internal_downscale=False, save_intermediate_steps=False):
         try:
@@ -45,11 +51,19 @@ class KirchnerDetector:
                 image = self.file_handler.load_image(img_input, apply_downscale=not skip_internal_downscale)
             else:
                 image = img_input.astype(np.float32)
-            
-            tqdm.write(f"      Running Kirchner detection...")
+                    
+            if PRINT_OUTPUT:
+                tqdm.write(f"      Running Kirchner detection...")
+                if self.custom_threshold:
+                    tqdm.write(f"      Using custom threshold: {self.gradient_threshold:.8f}")
+                else:
+                    tqdm.write(f"      Using default threshold: {self.gradient_threshold:.8f}")
+                    
             results = self.detect_resampling(image, save_intermediate_steps)
             detected = results['detected']
-            tqdm.write(f"      Detection result: {'DETECTED' if detected else 'CLEAN'}")
+                    
+            if PRINT_OUTPUT:
+                tqdm.write(f"      Detection result: {'DETECTED' if detected else 'CLEAN'}")
 
             return {
                 'detected': results['detected'],
@@ -64,26 +78,35 @@ class KirchnerDetector:
             raise
 
     def detect_resampling(self, image, save_intermediate_steps=False):
-        tqdm.write(f"        Step 1: Input preparation")
+        if PRINT_OUTPUT:
+            tqdm.write(f"        Step 1: Input preparation")
         if len(image.shape) == 3:
             image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         image = image.astype(np.float32)
-        
-        tqdm.write(f"        Step 2: Linear prediction with preset coefficients (Equation 25)")
+
+        if PRINT_OUTPUT:
+            tqdm.write(f"        Step 2: Linear prediction with preset coefficients (Equation 25)")
         predicted = cv2.filter2D(image, -1, self.predictor_filter, borderType=cv2.BORDER_REFLECT)
         
-        tqdm.write(f"        Step 3: Prediction error computation")
+        if PRINT_OUTPUT:
+            tqdm.write(f"        Step 3: Prediction error computation")
         prediction_error = image - predicted
-        
-        tqdm.write(f"        Step 4: P-map generation (Equation 21: p = lambda * exp(-|e|^tau / sigma))")
+             
+        if PRINT_OUTPUT:   
+            tqdm.write(f"        Step 4: P-map generation (Equation 21: p = lambda * exp(-|e|^tau / sigma))")
         p_map = self.generate_p_map(prediction_error)
-        
-        tqdm.write(f"        Step 5: Spectrum computation with contrast function gamma")
+                
+        if PRINT_OUTPUT:
+            tqdm.write(f"        Step 5: Spectrum computation with contrast function gamma")
         spectrum = self.compute_spectrum(p_map)
-        
-        tqdm.write(f"        Step 6: Cumulative periodogram detection (Equation 23-24)")
+                
+        if PRINT_OUTPUT:
+            tqdm.write(f"        Step 6: Cumulative periodogram detection (Equation 23-24)")
         detected, max_gradient, gradient_map = self.detect_cumulative_periodogram(spectrum)
-        tqdm.write(f"          Max gradient: {max_gradient:.6f}, Threshold: {self.gradient_threshold:.6f}")        
+                
+        if PRINT_OUTPUT:
+            threshold_type = "custom" if self.custom_threshold else "default"
+            tqdm.write(f"          Max gradient: {max_gradient:.6f}, Threshold: {self.gradient_threshold:.6f} ({threshold_type})")        
         
         if save_intermediate_steps:
             self.save_intermediate_results(image, predicted, prediction_error, 
@@ -182,5 +205,5 @@ class KirchnerDetector:
             'spectrum_std': np.std(spectrum),
             'spectrum_max': np.max(spectrum),
             'gradient_method_detected': gradient_detected,
-            'gradient_threshold': self.gradient_threshold
+            'gradient_threshold': self.gradient_threshold  # Always return the threshold used
         }

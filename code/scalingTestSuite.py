@@ -14,10 +14,11 @@ from kirchner import KirchnerDetector
 from tqdm import tqdm
 
 class ScalingTestSuite:
-    def __init__(self, scaling_factors=None, interpolation_methods=None, crop_center=False):
+    def __init__(self, scaling_factors=None, interpolation_methods=None, crop_center=False, max_gradient=None):
         self.scaling_factors = scaling_factors or [0.5, 0.8, 1.2, 1.6, 2.0]
         self.crop_center = crop_center
         self.file_handler = FileHandler(crop_center=crop_center)
+        self.max_gradient = max_gradient
             
         self.interpolation_methods = interpolation_methods or {
             'nearest': cv2.INTER_NEAREST,
@@ -41,17 +42,36 @@ class ScalingTestSuite:
             
             processing_time = time.time() - start_time
             
+            max_gradient = detailed_metrics.get('max_gradient')
+            if max_gradient is None or (isinstance(max_gradient, float) and np.isnan(max_gradient)):
+                max_gradient = result.get('max_gradient', 0.0)
+            
             return {
                 'file_name': Path(img_path).name,
                 'detected': result['detected'],
                 'processing_time': processing_time,
+                'max_gradient': max_gradient, 
+                'gradient_threshold': detailed_metrics.get('gradient_threshold', 0.008),
+                'spectrum_mean': detailed_metrics.get('spectrum_mean', 0.0),
+                'spectrum_std': detailed_metrics.get('spectrum_std', 0.0),
+                'spectrum_max': detailed_metrics.get('spectrum_max', 0.0),
                 'p_map': result['p_map'],
                 'spectrum': result['spectrum'],
                 'prediction_error': result['prediction_error'],
                 'detailed_metrics': detailed_metrics
             }
         except Exception as e:
-            return {'file_name': Path(img_path).name, 'detected': None, 'error': str(e)}
+            return {
+                'file_name': Path(img_path).name, 
+                'detected': False, 
+                'error': str(e),
+                'max_gradient': 0.0,
+                'processing_time': 0.0,
+                'gradient_threshold': 0.008,
+                'spectrum_mean': 0.0,
+                'spectrum_std': 0.0,
+                'spectrum_max': 0.0
+            }
 
     def create_scaled_images(self, input_folder, output_folder, source_downscale_size=512, source_downscale=True):
         input_path = Path(input_folder)
@@ -104,7 +124,6 @@ class ScalingTestSuite:
                                 left = center_x - orig_w // 2
                                 right = left + orig_w
                                 
-                                # Boundary checks
                                 if top < 0:
                                     bottom -= top
                                     top = 0
@@ -149,6 +168,7 @@ class ScalingTestSuite:
         
         print(f"\nCreated {len(created_images)} test images")
         return created_images, str(output_path)
+
     def run_scaling_test(self, input_folder, output_folder=None, sensitivity='medium', detector_class=None, create_visualizations=True, downscale_size=512, downscale=True):
         if output_folder is None:
             timestamp = time.strftime('%Y%m%d_%H%M%S')
@@ -166,7 +186,7 @@ class ScalingTestSuite:
         
         print("\n=== STEP 2: Running Kirchner detection ===")
         detector_class = detector_class or KirchnerDetector
-        detector = detector_class(sensitivity=sensitivity, downscale_size=downscale_size, downscale=False)
+        detector = detector_class(sensitivity=sensitivity, downscale_size=downscale_size, downscale=False, max_gradient=self.max_gradient)
 
         images = self.file_handler.scan_folder(scaled_folder)
         print(f"Found {len(images)} images to process")
@@ -177,9 +197,24 @@ class ScalingTestSuite:
             try:
                 result = self.process_with_detailed_metrics(img_path, detector)
                 results.append(result)
+                
+                max_grad = result.get('max_gradient')
+                if max_grad is None or (isinstance(max_grad, float) and np.isnan(max_grad)):
+                    tqdm.write(f"⚠️  Gradient issue: {img_path.name} -> {max_grad}")
+                    
             except Exception as e:
                 tqdm.write(f"Error processing {img_path.name}: {e}")
-                results.append({'file_name': img_path.name, 'error': str(e), 'detected': False})
+                results.append({
+                    'file_name': img_path.name, 
+                    'error': str(e), 
+                    'detected': False,
+                    'max_gradient': 0.0,
+                    'processing_time': 0.0,
+                    'gradient_threshold': 0.008,
+                    'spectrum_mean': 0.0,
+                    'spectrum_std': 0.0,
+                    'spectrum_max': 0.0
+                })
         
         detection_count = sum(1 for r in results if r.get('detected', False))
         print(f"\n✅ Detection phase completed: {detection_count}/{len(images)} flagged as resampled")
@@ -204,7 +239,7 @@ class ScalingTestSuite:
         self.file_handler.create_output_folder(vis_folder)
         
         file_path_lookup = {Path(img['file_path']).name: img['file_path'] for img in created_images}
-        valid_results = [result for result in results if 'error' not in result and result['p_map'] is not None]
+        valid_results = [result for result in results if 'error' not in result and result.get('p_map') is not None]
         
         results_by_image = {}
         for result in valid_results:
@@ -226,7 +261,6 @@ class ScalingTestSuite:
         
         visualization_count = 0
         errors_count = 0
-        total_items = sum(len(image_results) for image_results in results_by_image.items())
         
         progress_items = []
         for original_name, image_results in results_by_image.items():
@@ -251,13 +285,13 @@ class ScalingTestSuite:
                 
                 create_scaling_visualization(
                     result['file_name'],
-                    result['p_map'],
-                    result['spectrum'],
-                    result['prediction_error'],
+                    result.get('p_map'),
+                    result.get('spectrum'),
+                    result.get('prediction_error'),
                     result['detected'],
                     scaling_factor,
                     interpolation_method,
-                    result['detailed_metrics'],
+                    result.get('detailed_metrics', {}),
                     image_vis_folder,
                     file_path,
                     crop_center=self.crop_center,
@@ -272,6 +306,6 @@ class ScalingTestSuite:
         print(f"\n✅ Created {visualization_count} visualizations ({errors_count} errors)")
         return visualization_count, errors_count
 
-def run_scaling_test(input_folder, scaling_factors=None, interpolation_methods=None, sensitivity='medium', output_folder=None, detector_class=None, create_visualizations=True, downscale_size=512, downscale=True, crop_center=False):
-    test_suite = ScalingTestSuite(scaling_factors=scaling_factors, interpolation_methods=interpolation_methods, crop_center=crop_center)
+def run_scaling_test(input_folder, scaling_factors=None, interpolation_methods=None, sensitivity='medium', output_folder=None, detector_class=None, create_visualizations=True, downscale_size=512, downscale=True, crop_center=False, max_gradient=None):
+    test_suite = ScalingTestSuite(scaling_factors=scaling_factors, interpolation_methods=interpolation_methods, crop_center=crop_center, max_gradient=max_gradient)
     return test_suite.run_scaling_test(input_folder, output_folder, sensitivity, detector_class, create_visualizations, downscale_size, downscale)
