@@ -17,7 +17,7 @@ IMAGE_FOLDER_PATHS = [
     'img_cluttered',
 ]
 
-DOWNSCALE_SIZE = 500  
+DOWNSCALE_SIZE = 512  
 DOWNSCALE = True
 CROP_CENTER = False
 

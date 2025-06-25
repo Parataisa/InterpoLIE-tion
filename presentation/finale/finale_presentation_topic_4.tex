@@ -183,12 +183,13 @@
 		\end{column}
 	\end{columns}
 \end{frame}
-
 \begin{frame}
+	\frametitle{Schritt 1: Linear Prediction Filter - How it works\textsuperscript{1}}
+
 	\begin{columns}[T]
 		\begin{column}{0.60\textwidth}
-			\frametitle{Schritt 1: Linear Prediction Filter - How it works~\footnote{\textit{Anmerkung:} Stark Simplifiziert, um Konzept zu verdeutlichen}}
 			\includegraphics[width=\textwidth]{images/apply_filter.png}
+			\textcolor{blue}{\small Filter wird auf jedes Pixel angewendet}\textsuperscript{2}
 		\end{column}
 		\begin{column}{0.38\textwidth}
 			\begin{itemize}
@@ -198,6 +199,13 @@
 		\end{column}			
 	\end{columns}
 
+	\vspace{-1.5em}
+	\hfill \begin{minipage}{0.38\textwidth}
+		\begin{footnotesize}
+			\textsuperscript{1} Stark vereinfacht, um Konzept zu verdeutlichen\\
+			\textsuperscript{2} Bild wurde selbst erstellt (schneller als die KI-Bilder zuvor...)
+		\end{footnotesize}
+	\end{minipage}
 \end{frame}
 
 \begin{frame}
@@ -367,11 +375,41 @@
 		\end{column}
 		\begin{column}{0.40\textwidth}
 			\begin{itemize}
-				\item 11 Originalbilder
-				\item 10 Scalierungsfaktoren(110 Bilder)
+				\item 7 Originalbilder
+				\item 16 Scalierungsfaktoren
+				\item 4 Interpolationsmethoden
+				\item In Summe 455 Bilder
+				\item Detection Rate von > 75\%
 			\end{itemize}
 		\end{column}
 	\end{columns}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Fallauflösung: Analyseergebnisse}
+	\begin{columns}[T]
+		\begin{column}{0.6\textwidth}
+			\includegraphics[width=\textwidth]{images/scaling_analysis_report.png}
+		\end{column}
+		\begin{column}{0.40\textwidth}
+			\begin{itemize}
+				\item 7 Originalbilder
+				\item 16 Scalierungsfaktoren
+				\item 4 Interpolationsmethoden
+				\item In Summe 455 Bilder
+				\item Detection Rate von > 75\%
+				\item Sehr \textcolor{red}{Inhomogene Bilder} 
+			\end{itemize}
+		\end{column}
+	\end{columns}
+\end{frame}
+
+\begin{frame}
+	\frametitle{Fallauflösung: Analyseergebnisse}
+	\begin{center}
+		\includegraphics[width=0.6\textwidth]{images/img_cluttered.png}\\
+		\textit{Hinweis: Ja, das ist keine Kartoffel,...}
+	\end{center}
 \end{frame}
 
 \begin{frame}
@@ -383,45 +421,56 @@
 		\begin{column}{0.40\textwidth}
 			\begin{itemize}
 				\item 11 Originalbilder
-				\item 10 Scalierungsfaktoren(110 Bilder)
-				\item 4 Interpolationsmethoden(451 Bilder)
+				\item 16 Scalierungsfaktoren
+				\item 4 Interpolationsmethoden
+				\item In Summe 650 Bilder
+				\item Detection Rate von > 55\%
 			\end{itemize}
 		\end{column}
 	\end{columns}
 \end{frame}
 
+\begin{frame}
+	\frametitle{Fallauflösung: Analyseergebnisse}
+	\center \includegraphics[width=0.6\textwidth]{images/image_homogen.png}
+\end{frame}
+
 \subsection{Grenzen \& Lessons Learned}
 
 \begin{frame}
-	\frametitle{Grenzen der Methode}
+	\frametitle{Grenzen der Methode \& Grenzen unsere Implementierung}
 	
 	\begin{columns}[T]
 		\begin{column}{0.48\textwidth}
-			\begin{alertblock}{Kritische Einschränkungen}
+			\begin{alertblock}{Methode}
 				\begin{itemize}
-					\item \textcolor{red}{Sehr Abhängig vom Bildinhalt} (False Positives)
-					\item \textcolor{red}{Fixed Threshold} für $\delta'_T$ kann zu Fehlklassifikationen führen
+					\item \textcolor{red}{Sehr Abhängig vom Bildinhalt} (Homogene Bildbereiche=False Positives)
+					\item \textcolor{red}{"Fixed" Threshold} für $\delta'_T$ kann zu Fehlklassifikationen führen
 					\item \textcolor{red}{Interpolationsmethoden} können die Detektion beeinflussen
 					\item \textcolor{red}{Anti-Forensik-Methoden} können die Detektion umgehen~\cite{kirchner_hiding_2008}
 				\end{itemize}
 			\end{alertblock}
 		\end{column}
 		\begin{column}{0.48\textwidth}
-			\begin{exampleblock}{Was funktioniert gut}
+			\begin{exampleblock}{Unsere Implementierun}
 				\begin{itemize}
-					\item \textcolor{green}{Homogene Bildbereiche, ohne Muster}
+					\item \textcolor{red}{Rotation} Änderung durch Spectrum erkennbar, Threshold funktioniert nicht
+					\item \textcolor{red}{Locale Änderungen} scheinen nicht sonderlich auf
+					\item Eigenen Bilder wurden \textcolor{red}{"nur" mittels Smart-Phone Camera} aufgenommen
 				\end{itemize}
 			\end{exampleblock}
 		\end{column}
 	\end{columns}
-	
-	\vspace{1em}
-	
 \end{frame}
 
 \begin{frame}
-	\frametitle{Fazit \& Praktische Relevanz}
-	
+	\frametitle{Was hat gut funktioniert? \& Lessons Learned}
+	\begin{exampleblock}{Was hat gut funktioniert?}
+		\begin{itemize}
+			\item \textcolor{green}{Testing Framework}, um verschiedene Operationen automatisch zu testen
+			\item \textcolor{green}{Gute Visualisierung} der Ergebnisse
+		\end{itemize}
+	\end{exampleblock}
     \begin{block}{Lessons Learned}
         \begin{itemize}
             \item Methode ist ein \textbf{Indiz}, kein Beweis
