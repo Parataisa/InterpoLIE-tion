@@ -307,7 +307,7 @@
 	\begin{columns}[T]
 		\begin{column}{0.45\textwidth}
 			\textbf{Fourier Transform:}
-			$$P_f = \text{DFT}(p)$$
+			$$P_f = \Gamma\text{DFT}(p)$$
 			
 			\vspace{0.5em}
 			\textbf{Cumulative Periodogram:}
@@ -454,9 +454,9 @@
 		\begin{column}{0.48\textwidth}
 			\begin{exampleblock}{Unsere Implementierun}
 				\begin{itemize}
-					\item \textcolor{red}{Rotation} Änderung durch Spectrum erkennbar, Threshold funktioniert nicht
+					\item \textcolor{red}{Rotation} ist durch Spectrum erkennbar, aber Threshold funktioniert nicht
 					\item \textcolor{red}{Locale Änderungen} scheinen nicht sonderlich auf
-					\item Eigenen Bilder wurden \textcolor{red}{"nur" mittels Smart-Phone Camera} aufgenommen
+					\item Eigenen Bilder wurden \textcolor{red}{"nur" mittels Smart-Phone Camera} aufgenommen(.tif wurden auch getestet)
 				\end{itemize}
 			\end{exampleblock}
 		\end{column}
@@ -474,10 +474,9 @@
     \begin{block}{Lessons Learned}
         \begin{itemize}
             \item Methode ist ein \textbf{Indiz}, kein Beweis
-            \item Muss mit anderen forensischen Methoden kombiniert werden
-            \item Expertenwissen für Interpretation notwendig
             \item Don't overcomplicate: Einfachheit ist oft effektiver
             \item Normales Gradientenverfahren kann teuer sein, aber ist nicht immer notwendig
+            \item Beschaftigung und Betwertung guter Testdaten ist \textbf{essentiell} für gutes Verständnis
         \end{itemize}
     \end{block}
 \end{frame}
