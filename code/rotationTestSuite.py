@@ -78,7 +78,7 @@ class RotationTestSuite:
         h, w = img.shape[:2]
         center = (w // 2, h // 2)
         
-        rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+        rotation_matrix = cv2.getRotationMatrix2D(center, -angle, 1.0)
         
         cos_angle = abs(rotation_matrix[0, 0])
         sin_angle = abs(rotation_matrix[0, 1])

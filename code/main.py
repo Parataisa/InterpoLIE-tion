@@ -14,11 +14,12 @@ IMAGE_FOLDER_PATHS = [
     'img_jpg',
     'img_tif',
     'img_edited',
+    'img_cluttered',
 ]
 
-DOWNSCALE_SIZE = 1024  
+DOWNSCALE_SIZE = 500  
 DOWNSCALE = True
-CROP_CENTER = True
+CROP_CENTER = False
 
 RUN_BATCH_PROCESSING = True
 BATCH_VISUALIZATION = True
@@ -51,7 +52,72 @@ INTERPOLATION_METHODS = {
     'lanczos': cv2.INTER_LANCZOS4
 }
 
-def run_demo_single_folder(folder_path, sensitivity='medium'):
+def save_global_run_info(run_base_path, run_number, timestamp, folders, sensitivity):
+    with open(f"{run_base_path}/run_info.txt", 'w') as f:
+        f.write(f"Run Number: {run_number}\n")
+        f.write(f"Date/Time: {timestamp}\n")
+        f.write(f"Sensitivity: {sensitivity}\n")
+        
+        f.write("\n=== Processed Folders ===\n")
+        for idx, folder in enumerate(folders, 1):
+            f.write(f"{idx}. {folder}\n")
+        
+        f.write("\n=== Global Settings ===\n")
+        f.write(f"Downscale Size: {DOWNSCALE_SIZE}\n")
+        f.write(f"Downscale Enabled: {DOWNSCALE}\n")
+        f.write(f"Crop Center: {CROP_CENTER}\n")
+        f.write(f"Run Batch Processing: {RUN_BATCH_PROCESSING}\n")
+        f.write(f"Batch Visualization: {BATCH_VISUALIZATION}\n")
+        f.write(f"Run Scaling Test: {RUN_SCALING_TEST}\n")
+        f.write(f"Run Rotation Test: {RUN_ROTATION_TEST}\n")
+
+def save_folder_run_info(root_demo_folder, run_number, timestamp, folder_path, sensitivity):
+    with open(f"{root_demo_folder}/folder_info.txt", 'w') as f:
+        # Basic run information
+        f.write(f"Run Number: {run_number}\n")
+        f.write(f"Date/Time: {timestamp}\n")
+        f.write(f"Source Folder: {folder_path}\n")
+        
+        # Processing settings
+        f.write("\n=== Processing Settings ===\n")
+        f.write(f"Sensitivity: {sensitivity}\n")
+        f.write(f"Downscale Size: {DOWNSCALE_SIZE}\n")
+        f.write(f"Downscale Enabled: {DOWNSCALE}\n")
+        f.write(f"Crop Center: {CROP_CENTER}\n")
+        
+        # Batch settings
+        f.write("\n=== Batch Processing Settings ===\n")
+        f.write(f"Run Batch Processing: {RUN_BATCH_PROCESSING}\n")
+        f.write(f"Batch Visualization: {BATCH_VISUALIZATION}\n")
+        f.write(f"Save Intermediate Steps: {SAVE_INTERMEDIATE_STEPS}\n")
+        f.write(f"Use Batch Max Gradient: {USE_BATCH_MAX_GRADIENT}\n")
+        
+        # Scaling test settings
+        f.write("\n=== Scaling Test Settings ===\n")
+        f.write(f"Run Scaling Test: {RUN_SCALING_TEST}\n")
+        f.write(f"Scaling Visualization: {SCALING_VISUALIZATION}\n")
+        f.write(f"Scaling Min: {SCALING_MIN}\n")
+        f.write(f"Scaling Max: {SCALING_MAX}\n")
+        f.write(f"Scaling Step: {SCALING_STEP}\n")
+        f.write(f"Number of Scaling Factors: {len(SCALING_FACTORS)}\n")
+        f.write(f"Scaling Factors: {', '.join(f'{sf:.2f}' for sf in SCALING_FACTORS)}\n")
+        
+        # Rotation test settings
+        f.write("\n=== Rotation Test Settings ===\n")
+        f.write(f"Run Rotation Test: {RUN_ROTATION_TEST}\n")
+        f.write(f"Rotation Visualization: {ROTATION_VISUALIZATION}\n")
+        f.write(f"Rotation Min: {ROTATION_MIN}\n")
+        f.write(f"Rotation Max: {ROTATION_MAX}\n")
+        f.write(f"Rotation Step: {ROTATION_STEP}\n")
+        f.write(f"Number of Rotation Angles: {len(ROTATION_ANGLES)}\n")
+        f.write(f"Rotation Angles: {', '.join(f'{ra:.1f}' for ra in ROTATION_ANGLES)}\n")
+        
+        # Interpolation methods
+        f.write("\n=== Interpolation Methods ===\n")
+        for method_name in INTERPOLATION_METHODS.keys():
+            f.write(f"- {method_name}\n")
+
+def run_demo_single_folder(folder_path, sensitivity='medium', run_base_path=None, run_number=None, timestamp=None):
     if not os.path.exists(folder_path):
         print(f"❌ Error: Image folder '{folder_path}' not found.")
         return None
@@ -60,13 +126,24 @@ def run_demo_single_folder(folder_path, sensitivity='medium'):
     print(f"🔍 PROCESSING FOLDER: {folder_path}")
     print("="*80)
     
-    timestamp = time.strftime('%Y%m%d_%H%M%S')
     folder_name = Path(folder_path).name
-    root_demo_folder = f'demo/{folder_name}_{timestamp}'
-    Path(root_demo_folder).mkdir(parents=True, exist_ok=True)
     
-    print(f"📁 Results will be saved to: {root_demo_folder}")
+    if run_base_path is None:
+        timestamp = time.strftime('%Y%m%d_%H%M%S') if timestamp is None else timestamp
+        base_demo_folder = 'demo'
+        Path(base_demo_folder).mkdir(parents=True, exist_ok=True)
+        
+        run_number = 1 if run_number is None else run_number
+        run_folder_name = f"run_{run_number}"
+        run_base_path = Path(base_demo_folder) / run_folder_name
+        run_base_path.mkdir(parents=True, exist_ok=True)
     
+    root_demo_folder = run_base_path / folder_name
+    root_demo_folder.mkdir(parents=True, exist_ok=True)
+    
+    print(f"📁 Results will be saved to: {root_demo_folder} (Run #{run_number})")
+    save_folder_run_info(root_demo_folder, run_number, timestamp, folder_path, sensitivity)
+        
     max_gradient_from_batch = None
     
     if RUN_BATCH_PROCESSING:
@@ -169,16 +246,33 @@ def run_demo(sensitivity='medium'):
     print("KIRCHNER RESAMPLING DETECTOR - ANALYSIS")
     print("="*80)
     
+    base_demo_folder = 'demo'
+    Path(base_demo_folder).mkdir(parents=True, exist_ok=True)
+    
+    run_number = 1
+    while True:
+        run_folder_name = f"run_{run_number}"
+        run_base_path = Path(base_demo_folder) / run_folder_name
+        if not run_base_path.exists():
+            break
+        run_number += 1
+    
+    run_base_path.mkdir(parents=True, exist_ok=True)
+    print(f"📂 Creating new run folder: {run_base_path} (Run #{run_number})")
+    
     print(f"📂 Configured folders: {len(IMAGE_FOLDER_PATHS)}")
     for i, folder in enumerate(IMAGE_FOLDER_PATHS, 1):
         print(f"   {i}. {folder}")
     
     completed_folders = []
     failed_folders = []
+    timestamp = time.strftime('%Y%m%d_%H%M%S')
+    
+    save_global_run_info(run_base_path, run_number, timestamp, IMAGE_FOLDER_PATHS, sensitivity)
     
     for folder_path in IMAGE_FOLDER_PATHS:
         try:
-            result_folder = run_demo_single_folder(folder_path, sensitivity)
+            result_folder = run_demo_single_folder(folder_path, sensitivity, run_base_path, run_number, timestamp)
             if result_folder:
                 completed_folders.append((folder_path, result_folder))
             else:
@@ -206,7 +300,8 @@ def run_demo(sensitivity='medium'):
     print(f"   Completed: {len(completed_folders)}")
     print(f"   Failed: {len(failed_folders)}")
     
-    return completed_folders
+    return completed_folders, run_base_path
+
 
 def main():
     try:
@@ -227,3 +322,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
