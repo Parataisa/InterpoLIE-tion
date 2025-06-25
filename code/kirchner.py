@@ -60,9 +60,9 @@ class KirchnerDetector:
                     tqdm.write(f"      Using default threshold: {self.gradient_threshold:.8f}")
                     
             results = self.detect_resampling(image, save_intermediate_steps)
-            detected = results['detected']
                     
             if PRINT_OUTPUT:
+                detected = results['detected']
                 tqdm.write(f"      Detection result: {'DETECTED' if detected else 'CLEAN'}")
 
             return {
@@ -130,61 +130,80 @@ class KirchnerDetector:
         abs_error *= self.lambda_param
         return abs_error
 
-    def compute_spectrum(self, p_map, gamma=0.8):
-        # Remove DC component
-        p_map_zero_mean = p_map - np.mean(p_map)
-        
-        # FFT computation
-        fft_result = fft2(p_map_zero_mean)
-        magnitude_spectrum = np.abs(fftshift(fft_result))
-        
-        # Optimized radial weighting using ogrid
-        h, w = p_map.shape
+    def apply_contrast_function(self, dft_magnitude, gamma=0.8):
+        h, w = dft_magnitude.shape
         center_h, center_w = h // 2, w // 2
         
-        # Create radial distance map 
         y, x = np.ogrid[-center_h:h-center_h, -center_w:w-center_w]
         radial_dist = np.sqrt(y*y + x*x)
         max_radius = np.max(radial_dist)
         
         if max_radius > 0:
             radial_weight = radial_dist / max_radius
-            weighted_spectrum = magnitude_spectrum * radial_weight
         else:
-            weighted_spectrum = magnitude_spectrum
+            radial_weight = np.ones_like(radial_dist)
         
-        return np.power(weighted_spectrum, gamma)
+        weighted_magnitude = dft_magnitude * radial_weight
+        
+        contrast_enhanced = np.power(weighted_magnitude, gamma)
+        
+        return contrast_enhanced
 
-    def detect_cumulative_periodogram(self, spectrum):
-        # Remove DC component
-        spectrum = spectrum.copy()
+    def compute_spectrum(self, p_map, gamma=0.8):
+        # Remove DC component (mentioned in footnote 3)
+        p_map_zero_mean = p_map - np.mean(p_map)
+        
+        # DFT computation
+        fft_result = fft2(p_map_zero_mean)
+        magnitude_spectrum = np.abs(fftshift(fft_result))
+        
+        # Apply contrast function Γ
+        enhanced_spectrum = self.apply_contrast_function(magnitude_spectrum, gamma)
+        
+        return enhanced_spectrum
+
+    def detect_cumulative_periodogram(self, spectrum, gamma=0.8):
         h, w = spectrum.shape
         center_h, center_w = h // 2, w // 2
-        spectrum[center_h, center_w] = 0
         
-        # First quadrant of a p-map's DFT (0 <= f <= b) 
-        first_quadrant = spectrum[center_h:, center_w:]
+        # Remove DC component if still present
+        spectrum_copy = spectrum.copy()
+        spectrum_copy[center_h, center_w] = 0
         
-        # Equation 23: C(f) = sum|P(f')|^2 / sum_total|P(f')|^2
-        energy = first_quadrant ** 2
-        total_energy = np.sum(energy)
+        # Extract first quadrant as described: "0 ≤ f ≤ b"
+        # This means from center to bottom-right corner
+        first_quadrant = spectrum_copy[center_h:, center_w:]
+        
+        # Equation 23: C(f) = Σ|P(f')|² / (Σ_total|P(f')|²)^(-1)
+        # where P denotes Γ(DFT(p))
+        P_squared = first_quadrant ** 2
+        
+        # Calculate total energy in first quadrant
+        total_energy = np.sum(P_squared)
         
         if total_energy == 0:
             return False, 0.0, np.zeros_like(first_quadrant)
         
-        # Fast cumulative computation using numpy
-        cumulative_matrix = np.cumsum(np.cumsum(energy, axis=0), axis=1)
-        C_matrix = cumulative_matrix / total_energy
+        # Compute cumulative sum in 2D
+        # This creates C(f) for each position f
+        cumulative_energy = np.cumsum(np.cumsum(P_squared, axis=0), axis=1)
+
+        # Normalize by total energy to get C(f) ∈ [0,1]
+        C_matrix = cumulative_energy / total_energy
         
-        # Equation 24: delta' = max |grad C(f)| using Sobel operator (Paper Section 5.2.2)
-        grad_x = cv2.filter2D(C_matrix, -1, self.sobel_x)
-        grad_y = cv2.filter2D(C_matrix, -1, self.sobel_y)
+        # Equation 24: δ' = max_f |∇C(f)|
+        # Using Sobel edge detector as gradient approximation
+        grad_x = cv2.filter2D(C_matrix.astype(np.float32), -1, self.sobel_x)
+        grad_y = cv2.filter2D(C_matrix.astype(np.float32), -1, self.sobel_y)
+        
+        # Compute gradient magnitude
         gradient_magnitude = np.sqrt(grad_x**2 + grad_y**2)
         
-        max_gradient = np.max(gradient_magnitude)
-        detected = max_gradient > self.gradient_threshold
+        # Decision criterion
+        delta_prime = np.max(gradient_magnitude)
+        detected = delta_prime > self.gradient_threshold
         
-        return detected, max_gradient, gradient_magnitude
+        return detected, delta_prime, gradient_magnitude
 
     def save_intermediate_results(self, image, predicted, prediction_error, 
                                 p_map, spectrum, gradient_map):

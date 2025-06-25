@@ -10,9 +10,9 @@ from rotationTestSuite import run_rotation_test
 
 IMAGE_FOLDER_PATHS = [
     'img',
-    'img_jpg',
-    'img_tif',
-    'img_edited',
+    #'img_jpg',
+    #'img_tif',
+    #'img_edited',
 ]
 
 DOWNSCALE_SIZE = 512  
