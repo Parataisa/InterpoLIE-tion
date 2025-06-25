@@ -143,7 +143,12 @@ class RotationTestSuite:
                         try:
                             rotated_img = self.rotate_image(img, angle, interp_method)
                             
-                            rotated_name = f"{original_name}_rot{angle:03d}_{interp_name}{original_ext}"
+                            if isinstance(angle, (int, np.integer)) or angle.is_integer():
+                                angle_str = f"{int(angle):03d}"
+                            else:
+                                angle_str = f"{angle:.1f}".replace(".", "p")
+                            
+                            rotated_name = f"{original_name}_rot{angle_str}_{interp_name}{original_ext}"
                             rotated_path = image_folder / rotated_name
                             rotated_img_uint8 = np.clip(rotated_img, 0, 255).astype(np.uint8)
                             cv2.imwrite(str(rotated_path), rotated_img_uint8)
@@ -270,7 +275,10 @@ class RotationTestSuite:
                 if '_rot' in filename:
                     rot_part = filename.split('_rot')[1]
                     parts = rot_part.split('_')
-                    rotation_angle = int(parts[0]) if len(parts) >= 2 else 0
+                    if 'p' in parts[0]: 
+                        rotation_angle = float(parts[0].replace('p', '.'))
+                    else: 
+                        rotation_angle = int(parts[0])
                     interpolation_method = parts[1].split('.')[0] if len(parts) >= 2 else 'unknown'
                 else:
                     rotation_angle = 0

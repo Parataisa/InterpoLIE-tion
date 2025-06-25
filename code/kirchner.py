@@ -157,7 +157,7 @@ class KirchnerDetector:
         fft_result = fft2(p_map_zero_mean)
         magnitude_spectrum = np.abs(fftshift(fft_result))
         
-        # Apply contrast function Γ
+        # Apply contrast function gamma
         enhanced_spectrum = self.apply_contrast_function(magnitude_spectrum, gamma)
         
         return enhanced_spectrum
@@ -166,15 +166,15 @@ class KirchnerDetector:
         h, w = spectrum.shape
         center_h, center_w = h // 2, w // 2
         
-        # Remove DC component if still present
+        # Remove DC component
         spectrum_copy = spectrum.copy()
         spectrum_copy[center_h, center_w] = 0
         
-        # Extract first quadrant as described: "0 ≤ f ≤ b"
+        # Extract first quadrant as described: "0 <= f <= b"
         # This means from center to bottom-right corner
         first_quadrant = spectrum_copy[center_h:, center_w:]
         
-        # Equation 23: C(f) = Σ|P(f')|² / (Σ_total|P(f')|²)^(-1)
+        # Equation 23: C(f) = sum|P(f')|^2 / (sum_total|P(f')|^2)
         # where P denotes Γ(DFT(p))
         P_squared = first_quadrant ** 2
         
@@ -224,5 +224,5 @@ class KirchnerDetector:
             'spectrum_std': np.std(spectrum),
             'spectrum_max': np.max(spectrum),
             'gradient_method_detected': gradient_detected,
-            'gradient_threshold': self.gradient_threshold  # Always return the threshold used
+            'gradient_threshold': self.gradient_threshold
         }

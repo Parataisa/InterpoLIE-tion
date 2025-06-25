@@ -312,7 +312,7 @@ class AnalysisReports:
         if len(analysis_df) > 0 and len(analysis_df['interpolation'].unique()) > 1:
             pivot_data = analysis_df.pivot(index='interpolation', columns=param_col, values='detection_rate')
             
-            colors_heatmap = ['#006400', '#90EE90', '#FFD700', '#FF4500', '#8B0000']
+            colors_heatmap = ['#8B0000', '#FF4500', '#FFD700', '#90EE90', '#006400']
             n_bins = 100
             cmap = LinearSegmentedColormap.from_list('custom', colors_heatmap, N=n_bins)
             

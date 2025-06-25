@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import cv2
+import numpy as np
 
 from pathlib import Path
 from batchProcessor import quick_scan
@@ -15,12 +16,12 @@ IMAGE_FOLDER_PATHS = [
     #'img_edited',
 ]
 
-DOWNSCALE_SIZE = 512  
+DOWNSCALE_SIZE = 256  
 DOWNSCALE = True
-CROP_CENTER = False
+CROP_CENTER = True
 
 RUN_BATCH_PROCESSING = True
-BATCH_VISUALIZATION = True
+BATCH_VISUALIZATION = False
 SAVE_INTERMEDIATE_STEPS = False
 
 RUN_SCALING_TEST = True
@@ -31,21 +32,17 @@ ROTATION_VISUALIZATION = False
 
 USE_BATCH_MAX_GRADIENT = True
 
-SCALING_FACTORS = [0.1, 0.2, 0.3, 0.4, 0.5, 
-                   0.6, 0.7, 0.8, 0.9, 1.0, 
-                   1.1, 1.2, 1.3, 1.4, 1.5,
-                   1.6, 1.7, 1.8, 1.9, 2.0,
-                    2.1, 2.2, 2.3, 2.4, 2.5,
-                    2.6, 2.7, 2.8, 2.9, 3.0]
-ROTATION_ANGLES = [5, 10, 15, 20, 25, 30, 35, 40, 45,
-                     50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 
-                     100, 105, 110, 115, 120, 125, 130, 135, 
-                     140, 145, 150, 155, 160, 165, 170, 175,
-                        180, 185, 190, 195, 200, 205, 210, 215,
-                        220, 225, 230, 235, 240, 245, 250, 255,
-                        260, 265, 270, 275, 280, 285, 290, 295,
-                        300, 305, 310, 315, 320, 325, 330, 335,
-                        340, 345, 350, 355]
+# Scaling factors configuration
+SCALING_MIN = 0.5
+SCALING_MAX = 2.0
+SCALING_STEP = 0.1
+SCALING_FACTORS = np.arange(SCALING_MIN, SCALING_MAX + SCALING_STEP/2, SCALING_STEP).tolist()
+
+# Rotation angles configuration
+ROTATION_MIN = 0.0
+ROTATION_MAX = 45
+ROTATION_STEP = 2.5
+ROTATION_ANGLES = np.arange(ROTATION_MIN + ROTATION_STEP, ROTATION_MAX + ROTATION_STEP/2, ROTATION_STEP).tolist()
 
 INTERPOLATION_METHODS = {
     'nearest': cv2.INTER_NEAREST,
