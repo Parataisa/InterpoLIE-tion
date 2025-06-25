@@ -145,7 +145,7 @@ class FileHandler:
             
             if image_type == 'p_map':
                 img_display = (img_display * 255).astype(np.uint8)
-                img_display = 255 - img_display  # Invert, no colormap
+                img_display = 255 - img_display 
                 
             elif image_type == 'gradient':
                 if img_display.max() > img_display.min():

@@ -13,6 +13,8 @@ from analysisReport import AnalysisReports
 from kirchner import KirchnerDetector
 from tqdm import tqdm
 
+ZOOMIN_ON_UPSCALE = True 
+
 class ScalingTestSuite:
     def __init__(self, scaling_factors=None, interpolation_methods=None, crop_center=False, max_gradient=None):
         self.scaling_factors = scaling_factors or [0.5, 0.8, 1.2, 1.6, 2.0]
@@ -113,7 +115,7 @@ class ScalingTestSuite:
                         try:
                             new_h, new_w = int(orig_h * scale_factor), int(orig_w * scale_factor)
                             
-                            if scale_factor < 1.0:
+                            if scale_factor < 1.0 and ZOOMIN_ON_UPSCALE:
                                 scaled_img = cv2.resize(img, (new_w, new_h), interpolation=interp_method)
                                 final_img = scaled_img
                             else:

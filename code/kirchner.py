@@ -15,13 +15,13 @@ PRINT_OUTPUT = False
 
 class KirchnerDetector:
     def __init__(self, sensitivity='medium', lambda_param=1.0, tau=2.0, sigma=1.0, downscale_size=512, downscale=True, max_gradient=None):
-        # Preset filter coefficients from Equation 25
+        # Preset filter coefficients from Equation 25 3x3 filter
         self.predictor_filter = np.array([
             [-0.25, 0.50, -0.25],
             [0.50,  0.00,  0.50],
             [-0.25, 0.50, -0.25]
         ], dtype=np.float32)
-        
+
         # Optimized Sobel operators for gradient computation (Section 5.2.2)
         self.sobel_x = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=np.float32)
         self.sobel_y = np.array([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=np.float32)

@@ -139,9 +139,11 @@ class BatchProcessor:
 
         if use_batch_max_gradient:
             valid_gradients_list = [r.get('max_gradient', 0) for r in results if r.get('max_gradient') is not None and not (isinstance(r.get('max_gradient'), float) and np.isnan(r.get('max_gradient')))]
-            if valid_gradients_list:
-                max_gradient_threshold = max(valid_gradients_list)
-                print(f"\n🔄 Re-evaluating results with max gradient threshold: {max_gradient_threshold:.8f}")
+            if len(valid_gradients_list) >= 2:
+                sorted_gradients = sorted(valid_gradients_list, reverse=True)
+                max_gradient_threshold = sorted_gradients[1]  # Second highest value
+                print(f"\n🔄 Re-evaluating results with SECOND HIGHEST gradient threshold: {max_gradient_threshold:.8f}")
+                print(f"   Highest gradient found: {sorted_gradients[0]:.8f} (excluded from threshold)")
                 
                 updated_detections = 0
                 for result in results:
@@ -158,6 +160,9 @@ class BatchProcessor:
                             updated_detections += 1
                 
                 print(f"   Updated {updated_detections} detection results")
+            elif len(valid_gradients_list) == 1:
+                max_gradient_threshold = valid_gradients_list[0]
+                print(f"\n⚠️  Only one valid gradient found, using it as threshold: {max_gradient_threshold:.8f}")
             else:
                 print(f"⚠️  No valid gradients found for re-evaluation")
 

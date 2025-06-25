@@ -11,17 +11,17 @@ from rotationTestSuite import run_rotation_test
 
 IMAGE_FOLDER_PATHS = [
     'img',
-    #'img_jpg',
-    #'img_tif',
-    #'img_edited',
+    'img_jpg',
+    'img_tif',
+    'img_edited',
 ]
 
-DOWNSCALE_SIZE = 256  
+DOWNSCALE_SIZE = 1024  
 DOWNSCALE = True
 CROP_CENTER = True
 
 RUN_BATCH_PROCESSING = True
-BATCH_VISUALIZATION = False
+BATCH_VISUALIZATION = True
 SAVE_INTERMEDIATE_STEPS = False
 
 RUN_SCALING_TEST = True
