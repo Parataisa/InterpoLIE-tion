@@ -10,6 +10,8 @@ from fileHandler import FileHandler
 
 warnings.filterwarnings('ignore', message='This figure includes Axes that are not compatible with tight_layout')
 matplotlib.use('Agg')  
+# Set matplotlib to not warn about too many figures
+matplotlib.rcParams['figure.max_open_warning'] = 50  
 
 def create_unified_visualization(result_data, output_path, visualization_type='batch', crop_center=False, downscale_size=512):
     filename = result_data['file_name']
@@ -23,6 +25,7 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
     interpolation = result_data.get('interpolation', 'original')
     rotation_angle = result_data.get('rotation_angle', 0.0)
     
+    # Create figure with 2x2 grid for images + table below
     fig = plt.figure(figsize=(18, 12))
     gs = fig.add_gridspec(3, 2, height_ratios=[1, 1, 0.3], hspace=0.35, wspace=0.3)
     
@@ -44,16 +47,49 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
     
     file_handler = FileHandler(crop_center=crop_center, downscale_size=downscale_size)
     image_file_path = result_data.get('file_path', '')
+    
     search_paths = ['.', 'img', '../img', '../../img']
     
     if image_file_path:
         file_path_obj = Path(image_file_path)
-        search_paths.insert(0, str(file_path_obj.parent))
         if file_path_obj.exists():
             search_paths.insert(0, str(file_path_obj))
+        search_paths.insert(0, str(file_path_obj.parent))
+        
+        if '_scale' in filename or '_rot' in filename:
+            parent_dirs = file_path_obj.parents
+            for parent in parent_dirs:
+                search_paths.extend([
+                    str(parent / 'scaled_images'),
+                    str(parent / 'rotated_images'),
+                    str(parent)
+                ])
     
     found_image_path = file_handler.find_image_file(filename, search_paths)
-    img_array = file_handler.load_image_rgb(found_image_path, target_size=None, apply_downscale=True)
+    
+    if found_image_path is None:
+        try:
+            if image_file_path and Path(image_file_path).exists():
+                found_image_path = image_file_path
+            else:
+                img_array = np.ones((256, 256, 3), dtype=np.uint8) * 128
+                ax1.text(0.5, 0.5, f'Image not found:\n{filename}', ha='center', va='center',
+                        transform=ax1.transAxes, fontsize=12, fontweight='bold', color='red',
+                        bbox=dict(boxstyle="round,pad=0.3", facecolor='yellow', alpha=0.8))
+        except:
+            img_array = np.ones((256, 256, 3), dtype=np.uint8) * 128
+            ax1.text(0.5, 0.5, f'Image not found:\n{filename}', ha='center', va='center',
+                    transform=ax1.transAxes, fontsize=12, fontweight='bold', color='red',
+                    bbox=dict(boxstyle="round,pad=0.3", facecolor='yellow', alpha=0.8))
+    
+    if found_image_path is not None:
+        try:
+            img_array = file_handler.load_image_rgb(found_image_path, target_size=None, apply_downscale=True)
+        except Exception as e:
+            img_array = np.ones((256, 256, 3), dtype=np.uint8) * 128
+            ax1.text(0.5, 0.5, f'Error loading:\n{filename}\n{str(e)[:50]}...', ha='center', va='center',
+                    transform=ax1.transAxes, fontsize=10, fontweight='bold', color='red',
+                    bbox=dict(boxstyle="round,pad=0.3", facecolor='yellow', alpha=0.8))
     ax1.imshow(img_array)
     ax1.set_aspect('equal')  
     ax1.set_title('Original Image', fontsize=12, fontweight='bold')
@@ -100,7 +136,7 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
         else:
             gradient_enhanced = gradient_map
             
-        im4 = ax4.imshow(gradient_enhanced, cmap='hot', aspect='equal')
+        im4 = ax4.imshow(gradient_enhanced, cmap='gray', aspect='equal')
         ax4.set_title('Gradient Map |∇C(f)|', fontsize=12, fontweight='bold')
         plt.colorbar(im4, ax=ax4, shrink=0.8, label='Gradient Magnitude')
         
@@ -116,6 +152,7 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
         ax4.set_title('Gradient Map |∇C(f)|', fontsize=12, fontweight='bold')
         ax4.axis('off')
     
+    # Table section spanning both columns
     ax_table = fig.add_subplot(gs[2, :])
     ax_table.axis('off')
     
@@ -164,8 +201,9 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
     
     plt.subplots_adjust(left=0.08, bottom=0.08, right=0.95, top=0.88, wspace=0.3, hspace=0.4)
     plt.savefig(output_path, bbox_inches='tight', facecolor='white')
-    plt.close(fig)
-    
+    plt.close(fig) 
+    plt.clf() 
+
     return str(output_path)
 
 def create_batch_visualization(result, vis_folder, crop_center=False, downscale_size=512):

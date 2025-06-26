@@ -287,6 +287,16 @@ class RotationTestSuite:
                     interpolation_method = 'original'
                 
                 file_path = file_path_lookup.get(filename)
+                if file_path is None or not Path(file_path).exists():
+                    possible_paths = [
+                        output_path / 'rotated_images' / original_name / filename,
+                        output_path / 'rotated_images' / filename,
+                        Path(output_path).parent / 'rotated_images' / original_name / filename
+                    ]
+                    for possible_path in possible_paths:
+                        if possible_path.exists():
+                            file_path = str(possible_path)
+                            break
                 
                 create_rotation_visualization(
                     result['file_name'],
@@ -311,7 +321,7 @@ class RotationTestSuite:
         
         print(f"\n✅ Created {visualization_count} visualizations ({errors_count} errors)")
         return visualization_count, errors_count
-        
+
 def run_rotation_test(input_folder, rotation_angles=None, interpolation_methods=None, sensitivity='medium', output_folder=None, detector_class=None, create_visualizations=True, downscale_size=512, downscale=True, crop_center=False, max_gradient=None):
     test_suite = RotationTestSuite(rotation_angles=rotation_angles, interpolation_methods=interpolation_methods, crop_center=crop_center, max_gradient=max_gradient)
     return test_suite.run_rotation_test(input_folder, output_folder, sensitivity, detector_class, create_visualizations, downscale_size, downscale)

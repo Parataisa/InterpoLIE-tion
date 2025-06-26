@@ -77,6 +77,7 @@ class ScalingTestSuite:
                 'gradient_map': None
             }
 
+
     def create_scaled_images(self, input_folder, output_folder, source_downscale_size=512, source_downscale=True):
         input_path = Path(input_folder)
         output_path = Path(output_folder)
@@ -89,6 +90,7 @@ class ScalingTestSuite:
         print(f"Creating scaled versions of {len(images)} images...")
         print(f"Initial processing: {'Enabled' if source_downscale else 'Disabled'} (target: {source_downscale_size}px)")
         print(f"Crop center: {'Enabled' if self.crop_center else 'Disabled'}")
+        print(f"Scaling factors: {self.scaling_factors}")
         
         created_images = []
         
@@ -111,7 +113,6 @@ class ScalingTestSuite:
                     'interpolation': 'original',
                     'category': 'original'
                 })
-                
                 for scale_factor in self.scaling_factors:
                     for interp_name, interp_method in self.interpolation_methods.items():
                         try:
@@ -286,6 +287,16 @@ class ScalingTestSuite:
                     interpolation_method = 'original'
                 
                 file_path = file_path_lookup.get(filename)
+                if file_path is None or not Path(file_path).exists():
+                    possible_paths = [
+                        output_path / 'scaled_images' / original_name / filename,
+                        output_path / 'scaled_images' / filename,
+                        Path(output_path).parent / 'scaled_images' / original_name / filename
+                    ]
+                    for possible_path in possible_paths:
+                        if possible_path.exists():
+                            file_path = str(possible_path)
+                            break
                 
                 create_scaling_visualization(
                     result['file_name'],
