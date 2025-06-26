@@ -6,10 +6,10 @@
 \usepackage{algpseudocode}
 
 
-\definecolor{green}{RGB}{0,220,0}
+\definecolor{green}{RGB}{0,200,0}
 \definecolor{orange}{RGB}{240,220,0}
 \definecolor{blue}{RGB}{0,0,255}
-\definecolor{red}{RGB}{255,0,0}
+\definecolor{red}{RGB}{225,0,0}
 
 \addbibresource{bibliography.bib}
 
@@ -439,7 +439,7 @@
 
 \begin{frame}
 	\frametitle{Grenzen der Methode \& Grenzen unsere Implementierung}
-	
+	\vspace{-1em}
 	\begin{columns}[T]
 		\begin{column}{0.48\textwidth}
 			\begin{alertblock}{Methode}
@@ -454,9 +454,9 @@
 		\begin{column}{0.48\textwidth}
 			\begin{exampleblock}{Unsere Implementierun}
 				\begin{itemize}
-					\item \textcolor{red}{Rotation} ist durch Spectrum erkennbar, aber Threshold funktioniert nicht
-					\item \textcolor{red}{Locale Änderungen} scheinen nicht sonderlich auf
-					\item Eigenen Bilder wurden \textcolor{red}{"nur" mittels Smart-Phone Camera} aufgenommen(.tif wurden auch getestet)
+					\item \textcolor{red}{Rotation} ist durch Spectrum/Gradienten Map erkennbar, aber Threshold funktioniert nicht
+					\item \textcolor{red}{Lokale Änderungen} scheinen nicht sonderlich auf
+					\item Eigenen Bilder wurden \textcolor{red}{"nur" mittels Smart-Phone Camera} aufgenommen(.tif wurden auch getestet~\cite{noauthor_columbia_nodate})
 				\end{itemize}
 			\end{exampleblock}
 		\end{column}
@@ -471,10 +471,11 @@
 			\item \textcolor{green}{Gute Visualisierung} der Ergebnisse
 		\end{itemize}
 	\end{exampleblock}
+	\vspace{1em}
     \begin{block}{Lessons Learned}
         \begin{itemize}
 			\item Methode liefert ein \textbf{starkes Indiz}, jedoch keinen abschließenden Beweis
-			\item Rechenintensive Algorithmen wie das vollständige Gradientenverfahren sind nicht immer besser(Sobel operators)
+			\item Rechenintensive Algorithmen wie das vollständige Gradientenverfahren sind nicht immer besser(Sobel operators~\cite{noauthor_sobel_2025})
 			\item \textbf{Qualität der Testdaten} ist entscheidend für zuverlässige Ergebnisse und Methodenverständnis
         \end{itemize}
     \end{block}
