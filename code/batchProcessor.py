@@ -63,6 +63,7 @@ class BatchProcessor:
                 'p_map': result['p_map'],
                 'spectrum': result['spectrum'],
                 'prediction_error': result['prediction_error'],
+                'gradient_map': result.get('gradient_map'),  # Include gradient map
                 'detailed_metrics': detailed_metrics,
                 'max_gradient': max_gradient,
                 'gradient_threshold': detailed_metrics.get('gradient_threshold', 0.008),
@@ -79,7 +80,8 @@ class BatchProcessor:
                 'error': str(e),
                 'max_gradient': 0.0,
                 'processing_time': 0.0,
-                'gradient_threshold': 0.008
+                'gradient_threshold': 0.008,
+                'gradient_map': None
             }
 
     def process_batch(self, save_visualizations=True, use_batch_max_gradient=False):
@@ -112,7 +114,8 @@ class BatchProcessor:
                     'detected': False,
                     'max_gradient': 0.0,
                     'processing_time': 0.0,
-                    'gradient_threshold': 0.008
+                    'gradient_threshold': 0.008,
+                    'gradient_map': None
                 })
 
         print(f"\n🔍 Validating gradient data...")

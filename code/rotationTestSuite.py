@@ -59,6 +59,7 @@ class RotationTestSuite:
                 'p_map': result['p_map'],
                 'spectrum': result['spectrum'],
                 'prediction_error': result['prediction_error'],
+                'gradient_map': result.get('gradient_map'),
                 'detailed_metrics': detailed_metrics
             }
         except Exception as e:
@@ -71,7 +72,8 @@ class RotationTestSuite:
                 'gradient_threshold': 0.008,
                 'spectrum_mean': 0.0,
                 'spectrum_std': 0.0,
-                'spectrum_max': 0.0
+                'spectrum_max': 0.0,
+                'gradient_map': None
             }
 
     def rotate_image(self, img, angle, interpolation):
@@ -298,7 +300,8 @@ class RotationTestSuite:
                     image_vis_folder,
                     file_path,
                     crop_center=self.crop_center,
-                    downscale_size=downscale_size
+                    downscale_size=downscale_size,
+                    gradient_map=result.get('gradient_map')
                 )
                 visualization_count += 1
                 
@@ -308,7 +311,7 @@ class RotationTestSuite:
         
         print(f"\n✅ Created {visualization_count} visualizations ({errors_count} errors)")
         return visualization_count, errors_count
-
+        
 def run_rotation_test(input_folder, rotation_angles=None, interpolation_methods=None, sensitivity='medium', output_folder=None, detector_class=None, create_visualizations=True, downscale_size=512, downscale=True, crop_center=False, max_gradient=None):
     test_suite = RotationTestSuite(rotation_angles=rotation_angles, interpolation_methods=interpolation_methods, crop_center=crop_center, max_gradient=max_gradient)
     return test_suite.run_rotation_test(input_folder, output_folder, sensitivity, detector_class, create_visualizations, downscale_size, downscale)

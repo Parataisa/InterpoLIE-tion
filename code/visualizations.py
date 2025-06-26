@@ -16,13 +16,15 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
     detected = result_data['detected']
     p_map = result_data['p_map']
     spectrum = result_data['spectrum']
+    gradient_map = result_data.get('gradient_map')
     detailed_metrics = result_data.get('detailed_metrics', {})
     
     scaling_factor = result_data.get('scaling_factor', 1.0)
     interpolation = result_data.get('interpolation', 'original')
+    rotation_angle = result_data.get('rotation_angle', 0.0)
     
-    fig = plt.figure(figsize=(16, 10))
-    gs = fig.add_gridspec(2, 3, height_ratios=[1, 0.4], hspace=0.3, wspace=0.3)
+    fig = plt.figure(figsize=(18, 12))
+    gs = fig.add_gridspec(3, 2, height_ratios=[1, 1, 0.3], hspace=0.35, wspace=0.3)
     
     title_color = 'red' if detected else 'green'
     status = "DETECTED" if detected else "CLEAN"
@@ -30,11 +32,14 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
     if visualization_type == 'scaling':
         fig.suptitle(f'{filename} - {status}\nScale: {scaling_factor:.1f}x, Method: {interpolation}',
                     fontsize=16, fontweight='bold', color=title_color, y=0.95)
+    elif visualization_type == 'rotation':
+        fig.suptitle(f'{filename} - {status}\nRotation: {rotation_angle:.1f}°, Method: {interpolation}',
+                    fontsize=16, fontweight='bold', color=title_color, y=0.95)
     else:
         fig.suptitle(f'{filename} - {status}',
                     fontsize=16, fontweight='bold', color=title_color, y=0.95)
     
-    # Panel 1: Original Image
+    # Panel 1: Original Image (top-left)
     ax1 = fig.add_subplot(gs[0, 0])
     
     file_handler = FileHandler(crop_center=crop_center, downscale_size=downscale_size)
@@ -54,15 +59,14 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
     ax1.set_title('Original Image', fontsize=12, fontweight='bold')
     ax1.axis('off')
     
-    # Panel 2: P-Map
+    # Panel 2: P-Map (top-right)
     ax2 = fig.add_subplot(gs[0, 1])
-
     im2 = ax2.imshow(p_map, cmap='binary_r', vmin=0, vmax=1, aspect='equal')
     ax2.set_title('P-Map (Equation 21)', fontsize=12, fontweight='bold')
     plt.colorbar(im2, ax=ax2, shrink=0.8)
     
-    # Panel 3: Frequency Spectrum
-    ax3 = fig.add_subplot(gs[0, 2])
+    # Panel 3: Frequency Spectrum (bottom-left)
+    ax3 = fig.add_subplot(gs[1, 0])
     rows, cols = spectrum.shape
     
     freq_x = np.linspace(-0.5, 0.5, cols)
@@ -86,7 +90,33 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
     ax3.set_ylabel('Normalized Frequency f_y')
     plt.colorbar(im3, ax=ax3, shrink=0.8)
     
-    ax_table = fig.add_subplot(gs[1, :])
+    # Panel 4: Gradient Map (bottom-right)
+    ax4 = fig.add_subplot(gs[1, 1])
+    
+    if gradient_map is not None:
+        if gradient_map.max() > gradient_map.min():
+            gradient_enhanced = np.power((gradient_map - gradient_map.min()) / 
+                                       (gradient_map.max() - gradient_map.min()), 0.7)
+        else:
+            gradient_enhanced = gradient_map
+            
+        im4 = ax4.imshow(gradient_enhanced, cmap='hot', aspect='equal')
+        ax4.set_title('Gradient Map |∇C(f)|', fontsize=12, fontweight='bold')
+        plt.colorbar(im4, ax=ax4, shrink=0.8, label='Gradient Magnitude')
+        
+        max_grad_val = gradient_map.max()
+        max_pos = np.unravel_index(gradient_map.argmax(), gradient_map.shape)
+        ax4.plot(max_pos[1], max_pos[0], 'cyan', marker='x', markersize=12, markeredgewidth=3)
+        ax4.text(0.02, 0.98, f'Max: {max_grad_val:.6f}', transform=ax4.transAxes, 
+                fontsize=10, fontweight='bold', color='white', va='top', ha='left',
+                bbox=dict(boxstyle="round,pad=0.3", facecolor='black', alpha=0.7))
+    else:
+        ax4.text(0.5, 0.5, 'Gradient data\nnot available', ha='center', va='center',
+                transform=ax4.transAxes, fontsize=14, fontweight='bold', color='gray')
+        ax4.set_title('Gradient Map |∇C(f)|', fontsize=12, fontweight='bold')
+        ax4.axis('off')
+    
+    ax_table = fig.add_subplot(gs[2, :])
     ax_table.axis('off')
     
     max_gradient = detailed_metrics.get('max_gradient', 0)
@@ -103,7 +133,7 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
     
     table = ax_table.table(cellText=table_data, colLabels=headers,
                         cellLoc='center', loc='center',
-                        bbox=[0.15, 0.3, 0.7, 0.4])
+                        bbox=[0.15, 0.2, 0.7, 0.6])
     
     table.auto_set_font_size(False)
     table.set_fontsize(11)
@@ -132,7 +162,7 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
                     
                     cell.set_text_props(size=10)
     
-    plt.subplots_adjust(left=0.08, bottom=0.12, right=0.95, top=0.88, wspace=0.3, hspace=0.4)
+    plt.subplots_adjust(left=0.08, bottom=0.08, right=0.95, top=0.88, wspace=0.3, hspace=0.4)
     plt.savefig(output_path, bbox_inches='tight', facecolor='white')
     plt.close(fig)
     
@@ -143,12 +173,17 @@ def create_batch_visualization(result, vis_folder, crop_center=False, downscale_
     base_name = filename.split('.')[0]
     output_path = vis_folder / f'{base_name}_analysis.png'
     
+    if 'gradient_map' not in result and 'detailed_metrics' in result:
+        detailed_metrics = result['detailed_metrics']
+        if isinstance(detailed_metrics, dict) and 'gradient_map' in detailed_metrics:
+            result['gradient_map'] = detailed_metrics['gradient_map']
+    
     return create_unified_visualization(result, output_path, visualization_type='batch', 
                                       crop_center=crop_center, downscale_size=downscale_size)
 
 def create_scaling_visualization(filename, p_map, spectrum, prediction_error, detected, 
                                scaling_factor, interpolation_method, detailed_metrics, 
-                               output_folder, file_path=None, crop_center=False, downscale_size=512):
+                               output_folder, file_path=None, crop_center=False, downscale_size=512, gradient_map=None):
     base_name = filename.split('.')[0]
     output_path = output_folder / f'{base_name}_scale{scaling_factor:.1f}_{interpolation_method}_analysis.png'
     
@@ -161,7 +196,8 @@ def create_scaling_visualization(filename, p_map, spectrum, prediction_error, de
         'prediction_error': prediction_error,
         'detailed_metrics': detailed_metrics,
         'scaling_factor': scaling_factor,
-        'interpolation': interpolation_method
+        'interpolation': interpolation_method,
+        'gradient_map': gradient_map
     }
     
     return create_unified_visualization(result_data, output_path, visualization_type='scaling', 
@@ -169,7 +205,7 @@ def create_scaling_visualization(filename, p_map, spectrum, prediction_error, de
 
 def create_rotation_visualization(filename, p_map, spectrum, prediction_error, detected, 
                                 rotation_angle, interpolation_method, detailed_metrics, 
-                                output_folder, file_path=None, crop_center=False, downscale_size=512):
+                                output_folder, file_path=None, crop_center=False, downscale_size=512, gradient_map=None):
     base_name = filename.split('.')[0]
     output_path = output_folder / f'{base_name}_rot{rotation_angle:03d}_{interpolation_method}_analysis.png'
     
@@ -182,7 +218,8 @@ def create_rotation_visualization(filename, p_map, spectrum, prediction_error, d
         'prediction_error': prediction_error,
         'detailed_metrics': detailed_metrics,
         'rotation_angle': rotation_angle,
-        'interpolation': interpolation_method
+        'interpolation': interpolation_method,
+        'gradient_map': gradient_map
     }
     
     return create_unified_visualization(result_data, output_path, visualization_type='rotation', 

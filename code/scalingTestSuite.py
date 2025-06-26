@@ -60,6 +60,7 @@ class ScalingTestSuite:
                 'p_map': result['p_map'],
                 'spectrum': result['spectrum'],
                 'prediction_error': result['prediction_error'],
+                'gradient_map': result.get('gradient_map'),
                 'detailed_metrics': detailed_metrics
             }
         except Exception as e:
@@ -72,7 +73,8 @@ class ScalingTestSuite:
                 'gradient_threshold': 0.008,
                 'spectrum_mean': 0.0,
                 'spectrum_std': 0.0,
-                'spectrum_max': 0.0
+                'spectrum_max': 0.0,
+                'gradient_map': None
             }
 
     def create_scaled_images(self, input_folder, output_folder, source_downscale_size=512, source_downscale=True):
@@ -297,7 +299,8 @@ class ScalingTestSuite:
                     image_vis_folder,
                     file_path,
                     crop_center=self.crop_center,
-                    downscale_size=downscale_size
+                    downscale_size=downscale_size,
+                    gradient_map=result.get('gradient_map')
                 )
                 visualization_count += 1
                 
