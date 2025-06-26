@@ -10,7 +10,6 @@ from fileHandler import FileHandler
 
 warnings.filterwarnings('ignore', message='This figure includes Axes that are not compatible with tight_layout')
 matplotlib.use('Agg')  
-# Set matplotlib to not warn about too many figures
 matplotlib.rcParams['figure.max_open_warning'] = 50  
 
 def create_unified_visualization(result_data, output_path, visualization_type='batch', crop_center=False, downscale_size=512):
@@ -25,7 +24,6 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
     interpolation = result_data.get('interpolation', 'original')
     rotation_angle = result_data.get('rotation_angle', 0.0)
     
-    # Create figure with 2x2 grid for images + table below
     fig = plt.figure(figsize=(18, 12))
     gs = fig.add_gridspec(3, 2, height_ratios=[1, 1, 0.3], hspace=0.35, wspace=0.3)
     
@@ -152,7 +150,6 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
         ax4.set_title('Gradient Map |∇C(f)|', fontsize=12, fontweight='bold')
         ax4.axis('off')
     
-    # Table section spanning both columns
     ax_table = fig.add_subplot(gs[2, :])
     ax_table.axis('off')
     
@@ -186,11 +183,11 @@ def create_unified_visualization(result_data, output_path, visualization_type='b
                 cell.set_linewidth(1)
                 cell.set_edgecolor('gray')
                 
-                if i == 0:  # Header row
+                if i == 0:
                     cell.set_facecolor('#e8e8e8')
                     cell.set_text_props(weight='bold', size=11)
                 else:
-                    if j == 3:  # Result column
+                    if j == 3:
                         text = table_data[i-1][j]
                         if text == 'DETECTED':
                             cell.set_facecolor('#ffcccb')  # Light red

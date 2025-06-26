@@ -74,7 +74,7 @@ class AnalysisReports:
         else:
             scaling_analysis.columns = ['total_images', 'detected_count', 'detection_rate', 
                                        'avg_processing_time']
-            scaling_analysis['avg_max_gradient'] = 0.0  # Add default column
+            scaling_analysis['avg_max_gradient'] = 0.0
         
         scaling_analysis = scaling_analysis.reset_index()
         
@@ -114,7 +114,6 @@ class AnalysisReports:
                     'spectrum_max': metrics.get('spectrum_max', 0.0)
                 })
             else:
-                # Ensure all fields have default values
                 row.update({
                     'max_gradient': row['max_gradient'] or 0.0,
                     'gradient_threshold': result.get('gradient_threshold', 0.008),
@@ -157,7 +156,7 @@ class AnalysisReports:
         else:
             rotation_analysis.columns = ['total_images', 'detected_count', 'detection_rate', 
                                         'avg_processing_time']
-            rotation_analysis['avg_max_gradient'] = 0.0  # Add default column
+            rotation_analysis['avg_max_gradient'] = 0.0
         
         rotation_analysis = rotation_analysis.reset_index()
         
@@ -514,7 +513,6 @@ class AnalysisReports:
     @staticmethod
     def _plot_batch_gradient_progression(ax, valid_results):
         try:
-            # Extract gradient data with proper index tracking
             gradient_data = []
             for i, result in enumerate(valid_results):
                 max_grad = result.get('max_gradient')
@@ -531,18 +529,15 @@ class AnalysisReports:
                         transform=ax.transAxes, fontsize=14, fontweight='bold')
                 return
             
-            # Extract aligned data
             indices = [d['index'] for d in gradient_data]
             gradients = [d['max_gradient'] for d in gradient_data]
             detected_flags = [d['detected'] for d in gradient_data]
             
-            # Separate detected vs clean
             clean_indices = [indices[i] for i, detected in enumerate(detected_flags) if not detected]
             clean_gradients = [gradients[i] for i, detected in enumerate(detected_flags) if not detected]
             detected_indices = [indices[i] for i, detected in enumerate(detected_flags) if detected]
             detected_gradients = [gradients[i] for i, detected in enumerate(detected_flags) if detected]
             
-            # Plot scatter points
             if clean_indices:
                 ax.scatter(clean_indices, clean_gradients, 
                           c='lightgreen', alpha=0.7, s=60, label=f'Clean Images ({len(clean_indices)})', 
@@ -553,7 +548,6 @@ class AnalysisReports:
                           c='lightcoral', alpha=0.8, s=80, label=f'Detected Images ({len(detected_indices)})', 
                           marker='^', edgecolors='darkred', linewidths=1.5)
             
-            # Calculate rolling average
             if len(gradients) > 3:
                 window_size = max(3, len(gradients) // 10)
                 rolling_gradient = []
@@ -569,16 +563,14 @@ class AnalysisReports:
                 ax.plot(rolling_indices, rolling_gradient, color='#000080', linestyle='-', 
                         linewidth=2.5, alpha=0.9, label=f'Rolling Average (window={window_size})')
             
-            # Add threshold line if available
             thresholds = [result.get('gradient_threshold') for result in valid_results 
                          if result.get('gradient_threshold') is not None]
             if thresholds:
-                threshold = thresholds[0]  # They should all be the same
+                threshold = thresholds[0]
                 ax.axhline(y=threshold, color='black', linestyle='--', 
                           linewidth=2.5, alpha=0.8, 
                           label=f'Threshold: {threshold:.6f}')
             
-            # Add statistics
             stats_text = f'Total gradients: {len(gradient_data)}\n'
             stats_text += f'Mean: {np.mean(gradients):.6f}\n'
             stats_text += f'Max: {np.max(gradients):.6f}\n'
@@ -594,7 +586,6 @@ class AnalysisReports:
             ax.legend(fontsize=10, frameon=True, fancybox=True, shadow=True)
             ax.grid(True, alpha=0.4, linestyle='--')
             
-            # Set appropriate limits
             if gradients:
                 y_margin = (max(gradients) - min(gradients)) * 0.1
                 ax.set_ylim(min(gradients) - y_margin, max(gradients) + y_margin)

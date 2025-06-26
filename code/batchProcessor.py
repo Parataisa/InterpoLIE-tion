@@ -63,7 +63,7 @@ class BatchProcessor:
                 'p_map': result['p_map'],
                 'spectrum': result['spectrum'],
                 'prediction_error': result['prediction_error'],
-                'gradient_map': result.get('gradient_map'),  # Include gradient map
+                'gradient_map': result.get('gradient_map'),
                 'detailed_metrics': detailed_metrics,
                 'max_gradient': max_gradient,
                 'gradient_threshold': detailed_metrics.get('gradient_threshold', 0.008),
